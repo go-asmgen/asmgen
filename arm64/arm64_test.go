@@ -17,6 +17,22 @@ func TestLayoutWrapper(t *testing.T) {
 	}
 }
 
+// TestNewFuncFlags checks the TEXT directive honours explicit flags, including
+// the empty-flags case (no NOSPLIT) used for larger frames or non-leaf functions.
+func TestNewFuncFlags(t *testing.T) {
+	sig := Layout([]string{"a"}, []Type{Int64}, []string{"ret"}, []Type{Int64})
+
+	noSplit := NewFuncFlags("f", sig, 16, "").Func().String()
+	if !strings.Contains(noSplit, "TEXT ·f(SB), $16-16\n") {
+		t.Errorf("empty flags: got header\n%s", noSplit)
+	}
+
+	noFrame := NewFuncFlags("g", sig, 0, "NOSPLIT|NOFRAME").Func().String()
+	if !strings.Contains(noFrame, "TEXT ·g(SB), NOSPLIT|NOFRAME, $0-16\n") {
+		t.Errorf("NOSPLIT|NOFRAME: got header\n%s", noFrame)
+	}
+}
+
 // TestMoveSelection covers every branch of loadMnemonic and storeMnemonic.
 func TestMoveSelection(t *testing.T) {
 	cases := []struct {

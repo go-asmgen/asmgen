@@ -120,8 +120,15 @@ type Builder struct {
 // function uses no stack locals). The function is marked NOSPLIT by default for
 // simplicity in v0 (no stack-growth preamble); revisit for large frames.
 func NewFunc(name string, sig Signature, frameSize int) *Builder {
+	return NewFuncFlags(name, sig, frameSize, "NOSPLIT")
+}
+
+// NewFuncFlags is like NewFunc but with explicit Plan 9 TEXT flags — e.g.
+// "NOSPLIT", "NOSPLIT|NOFRAME", or "" for none (which lets the assembler insert
+// the stack-growth preamble, needed for large frames or non-leaf functions).
+func NewFuncFlags(name string, sig Signature, frameSize int, flags string) *Builder {
 	return &Builder{
-		fn:  emit.NewFunction(name, "NOSPLIT", frameSize, sig.ArgsSize),
+		fn:  emit.NewFunction(name, flags, frameSize, sig.ArgsSize),
 		sig: sig,
 	}
 }
