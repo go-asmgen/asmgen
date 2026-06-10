@@ -9,19 +9,21 @@ on:
 permissions:
   contents: read
 
+# Always build with the latest stable Go toolchain. Some emitted instructions
+# (RISC-V Vector, LoongArch LSX) are only known to recent assemblers, so the
+# whole project tracks the current Go rather than pinning an old version.
 jobs:
   # The library (shared ABI0 model + per-arch builders + ISA-agnostic emit) is
   # ordinary architecture-independent Go: it builds and is coverage-gated
   # everywhere. The generated assembly is NOT exercised here — that is the
   # asm-<arch> jobs.
   lib:
-    name: lib (${{ matrix.os }} / go${{ matrix.go }})
+    name: lib (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go: ["1.22", "1.23"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,8 +31,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go }}
-          check-latest: true
+          go-version: stable
 
       - name: Show Go version
         run: go version
@@ -59,19 +60,15 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cover-${{ matrix.os }}-go${{ matrix.go }}
+          name: cover-${{ matrix.os }}
           path: cover.out
           if-no-files-found: warn
 
   # amd64 is the easy target: the GitHub-hosted ubuntu runner is amd64, so the
   # generated assembly (scalar + SSE SIMD) runs natively — no qemu.
   asm-amd64:
-    name: asm-amd64 (go${{ matrix.go }})
+    name: asm-amd64
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        go: ["1.22", "1.23"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,8 +76,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go }}
-          check-latest: true
+          go-version: stable
 
       - name: Confirm amd64
         run: go env GOARCH GOHOSTARCH
@@ -104,15 +100,14 @@ jobs:
   # be validated where it runs, so this job is arm64-native: it regenerates the
   # .s, checks it matches what is committed, runs `go vet` (asmdecl cross-checks
   # every name+offset(FP) against the Go declaration), builds, and runs the
-  # function for real.
+  # function for real (scalars, aggregates, arrays, NEON SIMD).
   asm-arm64:
-    name: asm-arm64 (${{ matrix.os }} / go${{ matrix.go }})
+    name: asm-arm64 (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04-arm, macos-latest]
-        go: ["1.22", "1.23"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -120,8 +115,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go }}
-          check-latest: true
+          go-version: stable
 
       - name: Confirm arm64
         run: go env GOARCH GOHOSTARCH
@@ -142,16 +136,12 @@ jobs:
         run: go test ./examples/add/... ./examples/types/... ./examples/aggregate/... ./examples/simd/arm64/... ./examples/array/arm64/...
 
   # riscv64 has no GitHub-hosted runner, so this job cross-compiles on amd64 and
-  # runs the generated assembly under qemu-user (binfmt). asmdecl and cmd/asm
-  # still validate offsets and mnemonics statically; qemu provides the runtime
-  # proof that the emitted RISC-V instructions compute the right answers.
+  # runs the generated assembly under qemu-user. asmdecl and cmd/asm validate
+  # offsets and mnemonics statically (including RVV); qemu provides the runtime
+  # proof. The SIMD runtime is a separate step that enables the vector CPU.
   asm-riscv64:
-    name: asm-riscv64 (go${{ matrix.go }})
+    name: asm-riscv64
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        go: ["1.22", "1.23"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -159,108 +149,63 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go }}
-          check-latest: true
+          go-version: stable
 
       - name: Install qemu-user-static
         run: sudo apt-get update && sudo apt-get install -y qemu-user-static
 
       - name: Regenerate assembly and check it is committed
         run: |
-          go generate ./examples/riscv64/...
-          git diff --exit-code -- examples/riscv64 || {
+          go generate ./examples/riscv64/... ./examples/simd/riscv64/...
+          git diff --exit-code -- examples/riscv64 examples/simd/riscv64 || {
             echo "::error::generated riscv64 assembly is stale; run go generate and commit"; exit 1; }
 
       - name: Vet (asmdecl)
-        run: GOOS=linux GOARCH=riscv64 go vet ./examples/riscv64/...
+        run: GOOS=linux GOARCH=riscv64 go vet ./examples/riscv64/... ./examples/simd/riscv64/...
 
-      - name: Build (cmd/asm validates mnemonics)
-        run: GOOS=linux GOARCH=riscv64 go build ./examples/riscv64/...
+      - name: Build (cmd/asm validates mnemonics, incl. RVV)
+        run: GOOS=linux GOARCH=riscv64 go build ./examples/riscv64/... ./examples/simd/riscv64/...
 
-      - name: Test (runtime correctness under qemu-riscv64)
+      - name: Test scalar (runtime under qemu-riscv64)
         run: GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/riscv64/...
 
-  # loong64 (LoongArch 64-bit) follows the same recipe as riscv64: no native
-  # runner, so cross-compile on amd64 and run the generated assembly under
-  # qemu-user. The shared ABI0 layout is unchanged; only the move table differs
-  # (MOVV for 8-byte ints, MOVF/MOVD for floats).
-  asm-loong64:
-    name: asm-loong64 (go${{ matrix.go }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        go: ["1.22", "1.23"]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ matrix.go }}
-          check-latest: true
-
-      - name: Install qemu-user-static
-        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
-
-      - name: Regenerate assembly and check it is committed
-        run: |
-          go generate ./examples/loong64/...
-          git diff --exit-code -- examples/loong64 || {
-            echo "::error::generated loong64 assembly is stale; run go generate and commit"; exit 1; }
-
-      - name: Vet (asmdecl)
-        run: GOOS=linux GOARCH=loong64 go vet ./examples/loong64/...
-
-      - name: Build (cmd/asm validates mnemonics)
-        run: GOOS=linux GOARCH=loong64 go build ./examples/loong64/...
-
-      - name: Test (runtime correctness under qemu-loongarch64)
-        run: GOARCH=loong64 go test -exec=qemu-loongarch64-static ./examples/loong64/...
-
-  # RVV (riscv64) and LSX (loong64) instructions were added to the Go assembler
-  # in Go 1.25, newer than the 1.22/1.23 matrix above — so the vector examples
-  # get their own job pinned to a recent toolchain. Static checks (asmdecl +
-  # cmd/asm) run here; a separate runtime step enables the vector CPU in qemu.
-  asm-vectors:
-    name: asm-vectors (riscv64 RVV + loong64 LSX)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-          check-latest: true
-
-      - name: Install qemu-user-static
-        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
-
-      - name: Regenerate assembly and check it is committed
-        run: |
-          go generate ./examples/simd/riscv64/... ./examples/simd/loong64/...
-          git diff --exit-code -- examples/simd/riscv64 examples/simd/loong64 || {
-            echo "::error::generated vector assembly is stale; run go generate and commit"; exit 1; }
-
-      - name: Vet (asmdecl)
-        run: |
-          GOOS=linux GOARCH=riscv64 go vet ./examples/simd/riscv64/...
-          GOOS=linux GOARCH=loong64 go vet ./examples/simd/loong64/...
-
-      - name: Build (cmd/asm validates RVV / LSX mnemonics)
-        run: |
-          GOOS=linux GOARCH=riscv64 go build ./examples/simd/riscv64/...
-          GOOS=linux GOARCH=loong64 go build ./examples/simd/loong64/...
-
-      - name: Test RVV under qemu (vectors enabled)
+      - name: Test RVV SIMD (runtime under qemu with vectors)
         env:
           QEMU_CPU: rv64,v=true,vlen=128
         run: GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/simd/riscv64/...
 
-      - name: Test LSX under qemu (vectors enabled)
+  # loong64 (LoongArch 64-bit) follows the same recipe as riscv64.
+  asm-loong64:
+    name: asm-loong64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install qemu-user-static
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+
+      - name: Regenerate assembly and check it is committed
+        run: |
+          go generate ./examples/loong64/... ./examples/simd/loong64/...
+          git diff --exit-code -- examples/loong64 examples/simd/loong64 || {
+            echo "::error::generated loong64 assembly is stale; run go generate and commit"; exit 1; }
+
+      - name: Vet (asmdecl)
+        run: GOOS=linux GOARCH=loong64 go vet ./examples/loong64/... ./examples/simd/loong64/...
+
+      - name: Build (cmd/asm validates mnemonics, incl. LSX)
+        run: GOOS=linux GOARCH=loong64 go build ./examples/loong64/... ./examples/simd/loong64/...
+
+      - name: Test scalar (runtime under qemu-loongarch64)
+        run: GOARCH=loong64 go test -exec=qemu-loongarch64-static ./examples/loong64/...
+
+      - name: Test LSX SIMD (runtime under qemu with vectors)
         env:
           QEMU_CPU: la464
         run: GOARCH=loong64 go test -exec=qemu-loongarch64-static ./examples/simd/loong64/...
