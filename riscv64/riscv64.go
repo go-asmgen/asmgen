@@ -4,7 +4,7 @@
 // surface and emits well-formed Plan 9 instruction text.
 //
 // The ABI0 frame layout is identical to every other 64-bit target and is shared
-// from internal/abi — demonstrating the core go-asmgen thesis: a new
+// from abi — demonstrating the core go-asmgen thesis: a new
 // architecture is just register names plus a move table over the same layout
 // model. riscv64 differs from arm64 only in those mnemonics: the 8-byte integer
 // move is MOV (not MOVD), and floats use MOVF (single) / MOVD (double).
@@ -13,11 +13,11 @@ package riscv64
 import (
 	"fmt"
 
-	"github.com/go-asmgen/asmgen/internal/abi"
-	"github.com/go-asmgen/asmgen/internal/emit"
+	"github.com/go-asmgen/asmgen/abi"
+	"github.com/go-asmgen/asmgen/emit"
 )
 
-// Re-exported ABI0 model (see internal/abi). Correct for sequences of riscv64
+// Re-exported ABI0 model (see abi). Correct for sequences of riscv64
 // scalars — signed/unsigned integers of 1/2/4/8 bytes, pointers, and 32/64-bit
 // floats — in any combination; not yet structs, arrays, or vectors.
 type (

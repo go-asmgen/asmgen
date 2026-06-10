@@ -7,12 +7,12 @@ package arm64
 import (
 	"fmt"
 
-	"github.com/go-asmgen/asmgen/internal/abi"
-	"github.com/go-asmgen/asmgen/internal/emit"
+	"github.com/go-asmgen/asmgen/abi"
+	"github.com/go-asmgen/asmgen/emit"
 )
 
 // The ABI0 frame layout (offsets, alignment, word size) is architecture-
-// independent and lives in internal/abi; arm64 differs from the other 64-bit
+// independent and lives in abi; arm64 differs from the other 64-bit
 // targets only in register names and move mnemonics. These aliases and the
 // Layout wrapper let callers stay entirely within the arm64 package.
 //

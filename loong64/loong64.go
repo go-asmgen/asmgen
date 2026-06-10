@@ -3,7 +3,7 @@
 // delegated to the Go toolchain's assembler (cmd/asm); this package only drives
 // the move-selection surface and emits well-formed Plan 9 instruction text.
 //
-// Like riscv64, loong64 reuses the shared ABI0 layout model (internal/abi)
+// Like riscv64, loong64 reuses the shared ABI0 layout model (abi)
 // unchanged — adding it was, once again, only a register/mnemonic table. The
 // 8-byte integer move is MOVV; floats use MOVF (single) / MOVD (double).
 package loong64
@@ -11,11 +11,11 @@ package loong64
 import (
 	"fmt"
 
-	"github.com/go-asmgen/asmgen/internal/abi"
-	"github.com/go-asmgen/asmgen/internal/emit"
+	"github.com/go-asmgen/asmgen/abi"
+	"github.com/go-asmgen/asmgen/emit"
 )
 
-// Re-exported ABI0 model (see internal/abi). Correct for sequences of loong64
+// Re-exported ABI0 model (see abi). Correct for sequences of loong64
 // scalars — signed/unsigned integers of 1/2/4/8 bytes, pointers, and 32/64-bit
 // floats — in any combination; not yet structs, arrays, or vectors.
 type (

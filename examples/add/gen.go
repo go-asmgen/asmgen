@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/go-asmgen/asmgen/arm64"
-	"github.com/go-asmgen/asmgen/internal/emit"
+	"github.com/go-asmgen/asmgen/emit"
 )
 
 func main() {

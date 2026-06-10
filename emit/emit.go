@@ -1,6 +1,7 @@
 // Package emit builds Plan 9 assembly text. It is deliberately dumb: it knows
-// how to write well-formed Plan 9 .s lines, nothing about any specific ISA.
-// Architecture packages (arm64, later riscv64/loong64) drive it.
+// how to write well-formed Plan 9 .s lines, nothing about any specific ISA. The
+// architecture packages (arm64, riscv64, loong64) drive it via their Builders,
+// and a File collects the resulting functions into a complete .s source.
 package emit
 
 import (

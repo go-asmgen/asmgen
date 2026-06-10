@@ -7,11 +7,11 @@ package types
 // MOVH, MOVW/MOVWU, MOVD, and FMOVS/FMOVD — validated by `go vet` asmdecl and
 // the runtime tests in types_test.go.
 
-func addInt32(a, b int32) int32     // MOVW  load / ADDW / MOVW  store
-func addUint32(a, b uint32) uint32  // MOVWU load / ADDW / MOVW  store
-func addInt16(a, b int16) int16     // MOVH  load / ADD  / MOVH  store
-func addInt8(a, b int8) int8        // MOVB  load / ADD  / MOVB  store
-func widenInt8(a int8) int64        // MOVB  (sign-extend) / MOVD store
-func widenUint8(a uint8) uint64     // MOVBU (zero-extend) / MOVD store
+func addInt32(a, b int32) int32       // MOVW  load / ADDW / MOVW  store
+func addUint32(a, b uint32) uint32    // MOVWU load / ADDW / MOVW  store
+func addInt16(a, b int16) int16       // MOVH  load / ADD  / MOVH  store
+func addInt8(a, b int8) int8          // MOVB  load / ADD  / MOVB  store
+func widenInt8(a int8) int64          // MOVB  (sign-extend) / MOVD store
+func widenUint8(a uint8) uint64       // MOVBU (zero-extend) / MOVD store
 func addFloat64(a, b float64) float64 // FMOVD / FADDD / FMOVD
 func addFloat32(a, b float32) float32 // FMOVS / FADDS / FMOVS

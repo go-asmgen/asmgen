@@ -6,7 +6,7 @@ import (
 )
 
 // TestLayoutWrapper checks the arm64.Layout wrapper delegates to the shared
-// abi layout (offsets are verified exhaustively in internal/abi).
+// abi layout (offsets are verified exhaustively in abi).
 func TestLayoutWrapper(t *testing.T) {
 	sig := Layout(
 		[]string{"a", "b"}, []Type{Int64, Int64},
@@ -20,7 +20,7 @@ func TestLayoutWrapper(t *testing.T) {
 // TestMoveSelection covers every branch of loadMnemonic and storeMnemonic.
 func TestMoveSelection(t *testing.T) {
 	cases := []struct {
-		t          Type
+		t           Type
 		load, store string
 	}{
 		{Int8, "MOVB", "MOVB"},
