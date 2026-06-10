@@ -48,6 +48,10 @@ Not yet correct for arrays as value parameters or first-class vector types.
 Three small packages: an architecture builder (`amd64` / `arm64` / `riscv64` /
 `loong64`), the ABI0 layout model (`abi`), and the Plan 9 file writer (`emit`).
 
+```sh
+go get github.com/go-asmgen/asmgen@v0.1.0
+```
+
 ```go
 package main
 
