@@ -1,44 +1,52 @@
 # go-asmgen
 
-Ergonomic generation of Go-compatible Plan 9 assembly for non-amd64
-architectures — **arm64**, **riscv64**, and **loong64**. Encoding is delegated to
-the Go toolchain assembler (`cmd/asm`); go-asmgen computes the ABI0 frame layout
-and emits well-formed Plan 9 instruction text.
+Ergonomic generation of Go-compatible Plan 9 assembly for **every 64-bit Go
+target** — **amd64**, **arm64**, **riscv64**, and **loong64**. Encoding is
+delegated to the Go toolchain assembler (`cmd/asm`); go-asmgen computes the ABI0
+frame layout and emits well-formed Plan 9 instruction text.
 
-This is the multi-architecture counterpart to what `avo` does for amd64. avo
-encodes instruction bytes itself, which is exactly what makes extending it to
-new ISAs expensive. go-asmgen instead emits Plan 9 text and lets `cmd/asm`
-encode, so each new architecture only needs a thin move/register surface over
-the **shared** ABI0 layout model ([`internal/abi`](internal/abi)). The three
-architectures differ only in their move tables:
+`avo` does this for amd64 by encoding instruction bytes itself — powerful, but
+exactly what makes extending it to new ISAs expensive. go-asmgen instead emits
+Plan 9 text and lets `cmd/asm` encode, so each architecture is just a thin
+move/register surface over a **shared** ABI0 layout model ([`abi`](abi)). avo
+remains the richer choice for amd64-specific work; go-asmgen's niche is **one
+uniform builder across all four targets** (and it is the only such tool for the
+non-amd64 ones). The architectures differ only in their move tables:
 
 | 8-byte int | float32 | float64 | |
 |---|---|---|---|
+| `MOVQ` | `MOVSS` | `MOVSD` | amd64 |
 | `MOVD` | `FMOVS` | `FMOVD` | arm64 |
 | `MOV` | `MOVF` | `MOVD` | riscv64 |
 | `MOVV` | `MOVF` | `MOVD` | loong64 |
 
 ## Status
 
-v0 — **arm64**, **riscv64**, **loong64**, **ABI0**. Correct for sequences of
-scalars in any combination: signed/unsigned integers of 1/2/4/8 bytes, pointers,
-and 32/64-bit floats. Each builder selects the right move per type and the shared
-layout computes ABI0 offsets (result area word-aligned, sub-word loads sign/zero-
-extended). Every emitted offset and access width is cross-checked by `go vet`
-asmdecl and exercised by runtime tests — natively on arm64, and under qemu-user
-for riscv64 and loong64.
+v0 — **amd64**, **arm64**, **riscv64**, **loong64**, **ABI0**. Correct for
+sequences of scalars in any combination: signed/unsigned integers of 1/2/4/8
+bytes, pointers, and 32/64-bit floats. Each builder selects the right move per
+type and the shared layout computes ABI0 offsets (result area word-aligned,
+sub-word loads sign/zero-extended). Every emitted offset and access width is
+cross-checked by `go vet` asmdecl and exercised by runtime tests — natively on
+amd64 and arm64, and under qemu-user for riscv64 and loong64.
 
 **Aggregates** are supported too: struct, slice, and string parameters are laid
 out by Go's struct rules and each field is addressed as `name_field+offset(FP)`
 (e.g. `s_base`/`s_len`/`s_cap` for a slice) — exactly what asmdecl validates. See
 [`examples/aggregate`](examples/aggregate).
 
-Not yet correct for arrays or vector (V-register) values.
+**SIMD** works through the `Raw` escape hatch over the loaded pointers: go-asmgen
+lays out the ABI0 frame and the vector body (SSE/AVX on amd64, NEON on arm64) is
+emitted directly. See [`examples/simd`](examples/simd) — packed-add, runtime
+tested. Vector *type* args (passing `[4]float32` by value) and `cmd/asm`-modelled
+vector helpers are future work.
+
+Not yet correct for arrays as value parameters or first-class vector types.
 
 ## Use it as a library
 
-Three small packages: an architecture builder (`arm64` / `riscv64` / `loong64`),
-the ABI0 layout model (`abi`), and the Plan 9 file writer (`emit`).
+Three small packages: an architecture builder (`amd64` / `arm64` / `riscv64` /
+`loong64`), the ABI0 layout model (`abi`), and the Plan 9 file writer (`emit`).
 
 ```go
 package main
@@ -75,11 +83,11 @@ For struct/slice/string parameters, build the layout with
 
 ## Validate locally (Go toolchain required)
 
-The library packages (`arm64`, `riscv64`, `loong64`, `internal/abi`,
-`internal/emit`) are architecture-independent and held to 100% test coverage:
+The library packages (`abi`, `emit`, `amd64`, `arm64`, `riscv64`, `loong64`) are
+architecture-independent and held to 100% test coverage:
 
 ```sh
-go test ./arm64/... ./riscv64/... ./loong64/... ./internal/...
+go test ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/...
 ```
 
 The generated assembly is the real test of correctness. On an arm64 host (Apple
@@ -126,8 +134,13 @@ GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/riscv64/...
   (`MOVV`, `MOVF`/`MOVD`), runtime-proven under qemu-user. (done)
 - **Aggregates**: struct/slice/string parameters laid out by Go's struct rules,
   fields addressed as `name_field+offset(FP)`, asmdecl- and runtime-validated.
-  (done — here)
-- Arrays, and vector (V-register) values.
+  (done)
+- Make the library importable: promote `abi` and `emit` out of `internal/`. (done)
+- Add **amd64** (fourth target; richer move table with `MOVxQSX/ZX` sub-word
+  loads and SSE float moves), runtime-proven natively, and **SIMD** examples
+  (amd64 SSE + arm64 NEON packed add) through `Raw`. (done — here)
+- First-class vector *types* (pass `[4]float32` by value; RVV on riscv64,
+  LSX/LASX on loong64 — all four assemblers support SIMD), and array value args.
 - Optional: derive instruction mnemonic tables from cmd/internal/obj to catch
   typos at generation time (still delegating encoding to cmd/asm).
 

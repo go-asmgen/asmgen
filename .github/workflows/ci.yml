@@ -36,15 +36,15 @@ jobs:
         run: go version
 
       - name: Vet
-        run: go vet ./abi/... ./emit/... ./arm64/... ./riscv64/... ./loong64/...
+        run: go vet ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/...
 
       - name: Build
-        run: go build ./abi/... ./emit/... ./arm64/... ./riscv64/... ./loong64/...
+        run: go build ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/...
 
       - name: Test + 100% coverage gate
         shell: bash
         run: |
-          go test -race -coverprofile=cover.out ./abi/... ./emit/... ./arm64/... ./riscv64/... ./loong64/...
+          go test -race -coverprofile=cover.out ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/...
           go tool cover -func=cover.out | tee cover.txt
           # Org-wide hard rule: the library is held to 100% statement coverage.
           # Every branch must be reachable from a test or the dead code is
@@ -62,6 +62,43 @@ jobs:
           name: cover-${{ matrix.os }}-go${{ matrix.go }}
           path: cover.out
           if-no-files-found: warn
+
+  # amd64 is the easy target: the GitHub-hosted ubuntu runner is amd64, so the
+  # generated assembly (scalar + SSE SIMD) runs natively — no qemu.
+  asm-amd64:
+    name: asm-amd64 (go${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ["1.22", "1.23"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+
+      - name: Confirm amd64
+        run: go env GOARCH GOHOSTARCH
+
+      - name: Regenerate assembly and check it is committed
+        run: |
+          go generate ./examples/amd64/... ./examples/simd/amd64/...
+          git diff --exit-code -- examples/amd64 examples/simd/amd64 || {
+            echo "::error::generated amd64 assembly is stale; run go generate and commit"; exit 1; }
+
+      - name: Vet (asmdecl)
+        run: go vet ./examples/amd64/... ./examples/simd/amd64/...
+
+      - name: Build
+        run: go build ./examples/amd64/... ./examples/simd/amd64/...
+
+      - name: Test (runtime correctness on native amd64, incl. SSE SIMD)
+        run: go test ./examples/amd64/... ./examples/simd/amd64/...
 
   # The whole point of go-asmgen is the emitted Plan 9 assembly. That can only
   # be validated where it runs, so this job is arm64-native: it regenerates the
@@ -91,18 +128,18 @@ jobs:
 
       - name: Regenerate assembly and check it is committed
         run: |
-          go generate ./examples/add/... ./examples/types/... ./examples/aggregate/...
-          git diff --exit-code -- examples/add examples/types examples/aggregate || {
+          go generate ./examples/add/... ./examples/types/... ./examples/aggregate/... ./examples/simd/arm64/...
+          git diff --exit-code -- examples/add examples/types examples/aggregate examples/simd/arm64 || {
             echo "::error::generated arm64 assembly is stale; run go generate and commit"; exit 1; }
 
       - name: Vet (asmdecl)
-        run: go vet ./examples/add/... ./examples/types/... ./examples/aggregate/...
+        run: go vet ./examples/add/... ./examples/types/... ./examples/aggregate/... ./examples/simd/arm64/...
 
       - name: Build
-        run: go build ./examples/add/... ./examples/types/... ./examples/aggregate/...
+        run: go build ./examples/add/... ./examples/types/... ./examples/aggregate/... ./examples/simd/arm64/...
 
-      - name: Test (runtime correctness on native arm64)
-        run: go test ./examples/add/... ./examples/types/... ./examples/aggregate/...
+      - name: Test (runtime correctness on native arm64, incl. NEON SIMD)
+        run: go test ./examples/add/... ./examples/types/... ./examples/aggregate/... ./examples/simd/arm64/...
 
   # riscv64 has no GitHub-hosted runner, so this job cross-compiles on amd64 and
   # runs the generated assembly under qemu-user (binfmt). asmdecl and cmd/asm
