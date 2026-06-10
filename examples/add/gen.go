@@ -14,8 +14,8 @@ import (
 func main() {
 	// func add(a, b int64) int64
 	sig := arm64.Layout(
-		[]string{"a", "b"}, []int{8, 8},
-		[]string{"ret"}, []int{8},
+		[]string{"a", "b"}, []arm64.Type{arm64.Int64, arm64.Int64},
+		[]string{"ret"}, []arm64.Type{arm64.Int64},
 	)
 
 	b := arm64.NewFunc("add", sig, 0)

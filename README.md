@@ -13,21 +13,33 @@ instruction-emit surface.
 
 ## Status
 
-v0 — proof of pipeline. Correct only for sequences of 8-byte
-(int64/uint64/pointer) arguments and results under **ABI0**. Not yet correct for
-mixed-size args, structs, floats, or vectors.
+v0 — arm64, **ABI0**. Correct for sequences of arm64 **scalars** in any
+combination: signed/unsigned integers of 1/2/4/8 bytes, pointers, and 32/64-bit
+floats. The builder selects the right move per type (`MOVB`/`MOVBU`, `MOVH`/`MOVHU`,
+`MOVW`/`MOVWU`, `MOVD`, `FMOVS`/`FMOVD`) and computes ABI0 offsets (results
+word-aligned, sub-word loads sign/zero-extended). Every emitted offset and access
+width is cross-checked by `go vet` asmdecl and exercised by runtime tests on
+native arm64.
 
-## Validate locally (network + Go toolchain required)
+Not yet correct for structs, arrays, or vector (V-register) values.
 
-The container these files were authored in has no Go toolchain, so the steps
-below must be run on your machine. They are the real test of correctness.
+## Validate locally (Go toolchain required)
+
+These steps are the real test of correctness; run them on an arm64 host (Apple
+Silicon, arm64 Linux, or qemu/Rosetta).
 
 ```sh
-cd examples/add
-go generate ./...        # runs gen.go -> writes add_arm64.s
-GOARCH=arm64 go vet ./... # asmdecl cross-checks .s offsets vs add.go decl
-GOARCH=arm64 go build ./...
-go test ./...            # run on an arm64 host or under qemu/Rosetta
+go generate ./examples/...        # runs each gen.go -> writes *_arm64.s
+GOARCH=arm64 go vet ./examples/... # asmdecl cross-checks .s offsets vs decls
+GOARCH=arm64 go build ./examples/...
+go test ./examples/...            # runtime correctness on arm64
+```
+
+The library packages (`arm64`, `internal/emit`) are architecture-independent and
+held to 100% test coverage:
+
+```sh
+go test ./arm64/... ./internal/...
 ```
 
 ### Validation priorities (in order)
@@ -43,9 +55,11 @@ go test ./...            # run on an arm64 host or under qemu/Rosetta
 
 ## Roadmap
 
-- v0: arm64, ABI0, 8-byte int/ptr args. (here)
-- Widen arm64 type support: 1/2/4-byte ints, float regs (F0..), proper
-  alignment + padding rules. Test each against asmdecl.
+- v0: arm64, ABI0, 8-byte int/ptr args. (done)
+- Widen arm64 scalar support: 1/2/4-byte signed/unsigned ints, pointers, float
+  regs (F0.., `FMOVS`/`FMOVD`), word-aligned result area, sub-word sign/zero
+  extension. Validated against asmdecl + runtime tests. (done — here)
+- Structs, arrays, and vector (V-register) values.
 - riscv64 (start RV64GC), reusing the emit layer.
 - loong64.
 - Optional: derive instruction mnemonic tables from cmd/internal/obj to catch

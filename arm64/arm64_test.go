@@ -26,8 +26,8 @@ func TestAlign(t *testing.T) {
 
 func TestLayoutEightByteSequence(t *testing.T) {
 	sig := Layout(
-		[]string{"a", "b"}, []int{8, 8},
-		[]string{"ret"}, []int{8},
+		[]string{"a", "b"}, []Type{Int64, Int64},
+		[]string{"ret"}, []Type{Int64},
 	)
 	if len(sig.Args) != 2 || len(sig.Rets) != 1 {
 		t.Fatalf("unexpected param counts: %+v", sig)
@@ -43,32 +43,60 @@ func TestLayoutEightByteSequence(t *testing.T) {
 	}
 }
 
-// TestLayoutAlignmentPadding exercises the align() branch inside Layout: a
-// 1-byte arg followed by an 8-byte arg must pad the second to offset 8, and the
-// whole region rounds up to a word boundary.
-func TestLayoutAlignmentPadding(t *testing.T) {
+// TestLayoutMixedSizeAlignment exercises the align() branch inside Layout with a
+// mix of widths: a 1-byte arg, then a 4-byte float (padded to offset 4), then an
+// 8-byte int (padded to offset 8), with a 2-byte result rounded into a word.
+func TestLayoutMixedSizeAlignment(t *testing.T) {
 	sig := Layout(
-		[]string{"flag", "val"}, []int{1, 8},
-		[]string{"ret"}, []int{4},
+		[]string{"flag", "f", "n"}, []Type{Int8, Float32, Int64},
+		[]string{"ret"}, []Type{Int16},
 	)
-	if sig.Args[0].Offset != 0 {
-		t.Errorf("flag offset = %d want 0", sig.Args[0].Offset)
+	wantArg := []int{0, 4, 8} // flag@0, f padded 1->4, n padded 5->8
+	for i, w := range wantArg {
+		if sig.Args[i].Offset != w {
+			t.Errorf("arg %q offset = %d want %d", sig.Args[i].Name, sig.Args[i].Offset, w)
+		}
 	}
-	if sig.Args[1].Offset != 8 { // 1 -> padded up to 8
-		t.Errorf("val offset = %d want 8", sig.Args[1].Offset)
-	}
-	if sig.Rets[0].Offset != 16 { // after val (8+8=16), 4-aligned already
+	if sig.Rets[0].Offset != 16 { // args end at 16 (already word-aligned)
 		t.Errorf("ret offset = %d want 16", sig.Rets[0].Offset)
 	}
-	if sig.ArgsSize != 24 { // 16+4=20 -> word-aligned to 24
-		t.Errorf("ArgsSize = %d want 24", sig.ArgsSize)
+	if sig.ArgsSize != 18 { // ret int16 at 16 + 2; no final rounding
+		t.Errorf("ArgsSize = %d want 18", sig.ArgsSize)
+	}
+}
+
+// TestMoveSelection covers every branch of loadMnemonic and storeMnemonic.
+func TestMoveSelection(t *testing.T) {
+	cases := []struct {
+		t          Type
+		load, store string
+	}{
+		{Int8, "MOVB", "MOVB"},
+		{Uint8, "MOVBU", "MOVB"},
+		{Int16, "MOVH", "MOVH"},
+		{Uint16, "MOVHU", "MOVH"},
+		{Int32, "MOVW", "MOVW"},
+		{Uint32, "MOVWU", "MOVW"},
+		{Int64, "MOVD", "MOVD"},
+		{Uint64, "MOVD", "MOVD"},
+		{Ptr, "MOVD", "MOVD"},
+		{Float32, "FMOVS", "FMOVS"},
+		{Float64, "FMOVD", "FMOVD"},
+	}
+	for _, c := range cases {
+		if got := loadMnemonic(c.t); got != c.load {
+			t.Errorf("loadMnemonic(%+v)=%s want %s", c.t, got, c.load)
+		}
+		if got := storeMnemonic(c.t); got != c.store {
+			t.Errorf("storeMnemonic(%+v)=%s want %s", c.t, got, c.store)
+		}
 	}
 }
 
 func TestBuilderEmitsExpectedText(t *testing.T) {
 	sig := Layout(
-		[]string{"a", "b"}, []int{8, 8},
-		[]string{"ret"}, []int{8},
+		[]string{"a", "b"}, []Type{Int64, Int64},
+		[]string{"ret"}, []Type{Int64},
 	)
 	b := NewFunc("add", sig, 0)
 	b.LoadArg("a", "R0").
@@ -93,8 +121,35 @@ func TestBuilderEmitsExpectedText(t *testing.T) {
 	}
 }
 
+// TestBuilderEmitsTypedMoves checks that the builder picks the float move and a
+// sub-word store from the parameter types, including the Raw format escape hatch.
+func TestBuilderEmitsTypedMoves(t *testing.T) {
+	sig := Layout(
+		[]string{"a", "b"}, []Type{Float32, Float32},
+		[]string{"ret"}, []Type{Int16},
+	)
+	b := NewFunc("mix", sig, 0)
+	b.LoadArg("a", "F0").
+		LoadArg("b", "F1").
+		Raw("%s F1, F0, F2", "FADDS").
+		StoreRet("R0", "ret").
+		Ret()
+
+	got := b.Func().String()
+	for _, line := range []string{
+		"\tFMOVS a+0(FP), F0",
+		"\tFMOVS b+4(FP), F1",
+		"\tFADDS F1, F0, F2",
+		"\tMOVH R0, ret+8(FP)",
+	} {
+		if !strings.Contains(got, line+"\n") {
+			t.Errorf("emitted text missing line %q\nfull:\n%s", line, got)
+		}
+	}
+}
+
 func TestLookupPanicsOnUnknownArg(t *testing.T) {
-	sig := Layout([]string{"a"}, []int{8}, nil, nil)
+	sig := Layout([]string{"a"}, []Type{Int64}, nil, nil)
 	b := NewFunc("f", sig, 0)
 	defer func() {
 		r := recover()
@@ -109,7 +164,7 @@ func TestLookupPanicsOnUnknownArg(t *testing.T) {
 }
 
 func TestStoreRetPanicsOnUnknownRet(t *testing.T) {
-	sig := Layout([]string{"a"}, []int{8}, []string{"ret"}, []int{8})
+	sig := Layout([]string{"a"}, []Type{Int64}, []string{"ret"}, []Type{Int64})
 	b := NewFunc("f", sig, 0)
 	defer func() {
 		if recover() == nil {
