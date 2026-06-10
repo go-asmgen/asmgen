@@ -48,7 +48,9 @@ integer multiply exists). It mirrors the existing three-same `VADD` family
 - **Use case:** vectorized Adler-32 / rolling weak checksums (rdiff/librsync
   style). The SIMD weak-checksum path is currently amd64-only (SSE `PMADDUBSW`)
   precisely because arm64 had no integer vector multiply mnemonic. Today Go's
-  arm64 assembler exposes floating-point `VFMUL` but no integer `VMUL`.
+  arm64 assembler exposes floating-point `VFMUL` but no integer `VMUL`. A second
+  consumer: vectorised base64 (Lemire) needs an integer multiply for its 6-bit
+  field extraction on arm64 NEON, same gap.
 - Patch: `go-vmul-neon.patch` (4 files, 76 lines).
 
 #### 2. riscv64 Zvbb `vror.vi`
