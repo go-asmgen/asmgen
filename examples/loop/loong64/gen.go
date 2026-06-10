@@ -17,14 +17,14 @@ func main() {
 	b.LoadArg("s_base", "R4").
 		LoadArg("s_len", "R5").
 		Raw("MOVV $0, R6").
-		Raw("loop:").
+		Label("loop").
 		Raw("BEQ R5, R0, done").
 		Raw("MOVV (R4), R7").
 		Raw("ADDV R7, R6, R6").
 		Raw("ADDV $8, R4, R4").
 		Raw("ADDV $-1, R5, R5").
 		Raw("JMP loop").
-		Raw("done:").
+		Label("done").
 		StoreRet("R6", "ret").
 		Ret()
 	f := emit.NewFile("loong64")

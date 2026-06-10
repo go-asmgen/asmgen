@@ -8,14 +8,14 @@ TEXT ·sumI64(SB), NOSPLIT, $0-32
 	MOV s_base+0(FP), X5
 	MOV s_len+8(FP), X6
 	MOV $0, X7
-	loop:
+loop:
 	BEQZ X6, done
 	MOV (X5), X8
 	ADD X8, X7, X7
 	ADD $8, X5, X5
 	ADD $-1, X6, X6
 	JMP loop
-	done:
+done:
 	MOV X7, ret+24(FP)
 	RET
 

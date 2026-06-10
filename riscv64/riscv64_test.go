@@ -114,6 +114,13 @@ func TestLoadArgPanicsOnUnknownArg(t *testing.T) {
 	b.LoadArg("nonexistent", "X5")
 }
 
+func TestLabel(t *testing.T) {
+	got := NewFunc("f", Layout(nil, nil, nil, nil), 0).Label("loop").Ret().Func().String()
+	if !strings.Contains(got, "\nloop:\n") {
+		t.Errorf("label not emitted at column 0:\n%s", got)
+	}
+}
+
 func TestStoreRetPanicsOnUnknownRet(t *testing.T) {
 	sig := Layout([]string{"a"}, []Type{Int64}, []string{"ret"}, []Type{Int64})
 	b := NewFunc("f", sig, 0)

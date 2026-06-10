@@ -20,14 +20,14 @@ func main() {
 	b.LoadArg("s_base", "R0"). // ptr
 					LoadArg("s_len", "R1"). // count
 					Raw("MOVD $0, R2").     // acc = 0
-					Raw("loop:").
+					Label("loop").
 					Raw("CBZ R1, done").  // if count == 0, done
 					Raw("MOVD (R0), R3"). // *ptr
 					Raw("ADD R3, R2, R2").
 					Raw("ADD $8, R0, R0"). // ptr++
 					Raw("SUB $1, R1, R1"). // count--
 					Raw("JMP loop").
-					Raw("done:").
+					Label("done").
 					StoreRet("R2", "ret").
 					Ret()
 

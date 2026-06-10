@@ -8,7 +8,7 @@ TEXT ·sumI64(SB), NOSPLIT, $0-32
 	MOVQ s_base+0(FP), AX
 	MOVQ s_len+8(FP), BX
 	MOVQ $0, CX
-	loop:
+loop:
 	TESTQ BX, BX
 	JZ done
 	MOVQ (AX), DX
@@ -16,7 +16,7 @@ TEXT ·sumI64(SB), NOSPLIT, $0-32
 	ADDQ $8, AX
 	DECQ BX
 	JMP loop
-	done:
+done:
 	MOVQ CX, ret+24(FP)
 	RET
 

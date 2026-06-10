@@ -34,6 +34,12 @@ func (f *Function) Insn(format string, args ...any) {
 	f.body = append(f.body, "\t"+fmt.Sprintf(format, args...))
 }
 
+// Label appends a branch-target definition, written at column 0 (no
+// indentation) like hand-written assembly.
+func (f *Function) Label(name string) {
+	f.body = append(f.body, name+":")
+}
+
 // String renders the complete TEXT block.
 func (f *Function) String() string {
 	var b strings.Builder

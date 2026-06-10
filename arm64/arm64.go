@@ -153,6 +153,13 @@ func (b *Builder) Raw(format string, args ...any) *Builder {
 	return b
 }
 
+// Label emits a branch target (e.g. a loop header) at column 0, for use with
+// branch instructions written via Raw.
+func (b *Builder) Label(name string) *Builder {
+	b.fn.Label(name)
+	return b
+}
+
 // Ret emits the return.
 func (b *Builder) Ret() *Builder { b.fn.Insn("RET"); return b }
 

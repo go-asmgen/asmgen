@@ -15,6 +15,18 @@ func TestFunctionStringWithFlags(t *testing.T) {
 	}
 }
 
+func TestFunctionLabel(t *testing.T) {
+	fn := NewFunction("f", "NOSPLIT", 0, 8)
+	fn.Label("loop")
+	fn.Insn("RET")
+	want := "TEXT ·f(SB), NOSPLIT, $0-8\n" +
+		"loop:\n" + // column 0, no leading tab
+		"\tRET\n"
+	if got := fn.String(); got != want {
+		t.Errorf("Function.Label:\ngot:\n%q\nwant:\n%q", got, want)
+	}
+}
+
 func TestFunctionStringNoFlags(t *testing.T) {
 	fn := NewFunction("noop", "", 16, 0)
 	want := "TEXT ·noop(SB), $16-0\n"

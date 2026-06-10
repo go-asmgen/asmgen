@@ -17,7 +17,7 @@ func main() {
 	b.LoadArg("s_base", "AX").
 		LoadArg("s_len", "BX").
 		Raw("MOVQ $0, CX").
-		Raw("loop:").
+		Label("loop").
 		Raw("TESTQ BX, BX").
 		Raw("JZ done").
 		Raw("MOVQ (AX), DX").
@@ -25,7 +25,7 @@ func main() {
 		Raw("ADDQ $8, AX").
 		Raw("DECQ BX").
 		Raw("JMP loop").
-		Raw("done:").
+		Label("done").
 		StoreRet("CX", "ret").
 		Ret()
 	f := emit.NewFile("amd64")
