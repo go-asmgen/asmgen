@@ -1,0 +1,58 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":timezone(Europe/Paris)"
+  ],
+  "schedule": [
+    "* 4-7 * * 1"
+  ],
+  "prHourlyLimit": 4,
+  "prConcurrentLimit": 10,
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
+  "packageRules": [
+    {
+      "description": "Group all golang.org/x/* module bumps into one PR.",
+      "matchManagers": ["gomod"],
+      "matchPackagePrefixes": ["golang.org/x/"],
+      "groupName": "golang.org/x"
+    },
+    {
+      "description": "Auto-merge minor and patch Go-module updates once CI is green.",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Auto-merge GitHub Actions minor/patch updates once CI is green.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Pin the Go toolchain to its major line (no auto-bumps across major Go versions).",
+      "matchManagers": ["gomod"],
+      "matchDepNames": ["go"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["* 4-7 * * 1"]
+  }
+}

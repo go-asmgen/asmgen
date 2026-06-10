@@ -1,0 +1,104 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # The library (arm64 layout model + ISA-agnostic emit) is ordinary
+  # architecture-independent Go: it builds and is coverage-gated everywhere.
+  # The generated assembly is NOT exercised here — that is the asm-arm64 job.
+  lib:
+    name: lib (${{ matrix.os }} / go${{ matrix.go }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go: ["1.22", "1.23"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+
+      - name: Show Go version
+        run: go version
+
+      - name: Vet
+        run: go vet ./arm64/... ./internal/...
+
+      - name: Build
+        run: go build ./arm64/... ./internal/...
+
+      - name: Test + 100% coverage gate
+        shell: bash
+        run: |
+          go test -race -coverprofile=cover.out ./arm64/... ./internal/...
+          go tool cover -func=cover.out | tee cover.txt
+          # Org-wide hard rule: the library is held to 100% statement coverage.
+          # Every branch must be reachable from a test or the dead code is
+          # removed — the bar is never lowered. The example package carries no
+          # statements (it is a generated-asm integration check, see asm-arm64).
+          cov=$(go tool cover -func=cover.out | tail -n 1 | awk '{print $3}' | tr -d '%')
+          echo "library coverage: ${cov}%"
+          awk -v t="$cov" 'BEGIN { exit !(t+0 >= 100.0) }' || {
+            echo "::error::library coverage ${cov}% < 100%"; exit 1; }
+
+      - name: Upload coverage profile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cover-${{ matrix.os }}-go${{ matrix.go }}
+          path: cover.out
+          if-no-files-found: warn
+
+  # The whole point of go-asmgen is the emitted Plan 9 assembly. That can only
+  # be validated where it runs, so this job is arm64-native: it regenerates the
+  # .s, checks it matches what is committed, runs `go vet` (asmdecl cross-checks
+  # every name+offset(FP) against the Go declaration), builds, and runs the
+  # function for real.
+  asm-arm64:
+    name: asm-arm64 (${{ matrix.os }} / go${{ matrix.go }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04-arm, macos-latest]
+        go: ["1.22", "1.23"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+
+      - name: Confirm arm64
+        run: go env GOARCH GOHOSTARCH
+
+      - name: Regenerate assembly and check it is committed
+        run: |
+          go generate ./examples/...
+          git diff --exit-code -- examples || {
+            echo "::error::generated assembly is stale; run 'go generate ./examples/...' and commit"; exit 1; }
+
+      - name: Vet (asmdecl)
+        run: go vet ./examples/...
+
+      - name: Build
+        run: go build ./examples/...
+
+      - name: Test (runtime correctness on native arm64)
+        run: go test ./examples/...

@@ -1,8 +1,8 @@
 # Test & coverage artifacts
 *.out
 *.test
-coverage.txt
-*.cov
+cover.out
+cover.txt
 
 # Editor / OS
 .DS_Store
