@@ -60,11 +60,30 @@ func (f *Function) String() string {
 type File struct {
 	build string // build constraint, e.g. "arm64"
 	funcs []*Function
+	datas []dataSym
+}
+
+type dataSym struct {
+	name  string
+	bytes []byte
 }
 
 func NewFile(buildArch string) *File { return &File{build: buildArch} }
 
 func (fl *File) Add(fn *Function) { fl.funcs = append(fl.funcs, fn) }
+
+// Data declares a file-local, read-only constant table (the `DATA`/`GLOBL`
+// directives) — the kind of byte table SIMD kernels load (a weight vector, a
+// shuffle mask). It returns the symbol to address in instructions, e.g.
+//
+//	sym := f.Data("weights", []byte{16, 15, 14, 13})
+//	b.Raw("MOVOU %s+0(SB), X0", sym)   // sym is "weights<>"
+//
+// The bytes are copied. RODATA|NOPTR mark the symbol read-only and pointer-free.
+func (fl *File) Data(name string, b []byte) string {
+	fl.datas = append(fl.datas, dataSym{name: name, bytes: append([]byte(nil), b...)})
+	return name + "<>"
+}
 
 func (fl *File) String() string {
 	var b strings.Builder
@@ -76,6 +95,13 @@ func (fl *File) String() string {
 	for _, fn := range fl.funcs {
 		b.WriteString(fn.String())
 		b.WriteString("\n")
+	}
+	for _, d := range fl.datas {
+		// One byte per DATA directive: simple and width-agnostic.
+		for i, by := range d.bytes {
+			fmt.Fprintf(&b, "DATA %s<>+%d(SB)/1, $0x%02x\n", d.name, i, by)
+		}
+		fmt.Fprintf(&b, "GLOBL %s<>(SB), RODATA|NOPTR, $%d\n\n", d.name, len(d.bytes))
 	}
 	return b.String()
 }

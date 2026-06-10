@@ -19,7 +19,7 @@ func main() {
 		Raw("MOV $0, X7").
 		Label("loop").
 		Raw("BEQZ X6, done").
-		Raw("MOV (X5), X8").
+		LoadIndirect("X5", riscv64.Int64, "X8").
 		Raw("ADD X8, X7, X7").
 		Raw("ADD $8, X5, X5").
 		Raw("ADD $-1, X6, X6").

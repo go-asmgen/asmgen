@@ -21,8 +21,8 @@ func main() {
 					LoadArg("s_len", "R1"). // count
 					Raw("MOVD $0, R2").     // acc = 0
 					Label("loop").
-					Raw("CBZ R1, done").  // if count == 0, done
-					Raw("MOVD (R0), R3"). // *ptr
+					Raw("CBZ R1, done").                   // if count == 0, done
+					LoadIndirect("R0", arm64.Int64, "R3"). // *ptr (typed deref helper)
 					Raw("ADD R3, R2, R2").
 					Raw("ADD $8, R0, R0"). // ptr++
 					Raw("SUB $1, R1, R1"). // count--

@@ -163,6 +163,21 @@ func (b *Builder) Label(name string) *Builder {
 	return b
 }
 
+// LoadIndirect emits a load of a value of type t from the address held in
+// ptrReg into reg — e.g. MOV (X5), X6 — using the same move selection as
+// LoadArg (sub-word loads sign/zero-extend).
+func (b *Builder) LoadIndirect(ptrReg string, t Type, reg string) *Builder {
+	b.fn.Insn("%s (%s), %s", loadMnemonic(t), ptrReg, reg)
+	return b
+}
+
+// StoreIndirect emits a store of reg (a value of type t) to the address held in
+// ptrReg — e.g. MOV X6, (X5).
+func (b *Builder) StoreIndirect(reg, ptrReg string, t Type) *Builder {
+	b.fn.Insn("%s %s, (%s)", storeMnemonic(t), reg, ptrReg)
+	return b
+}
+
 // Ret emits the return.
 func (b *Builder) Ret() *Builder { b.fn.Insn("RET"); return b }
 

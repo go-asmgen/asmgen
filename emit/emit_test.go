@@ -1,6 +1,27 @@
 package emit
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestFileData(t *testing.T) {
+	fl := NewFile("amd64")
+	sym := fl.Data("weights", []byte{0x10, 0x0f})
+	if sym != "weights<>" {
+		t.Errorf("Data returned %q want weights<>", sym)
+	}
+	got := fl.String()
+	for _, want := range []string{
+		"DATA weights<>+0(SB)/1, $0x10\n",
+		"DATA weights<>+1(SB)/1, $0x0f\n",
+		"GLOBL weights<>(SB), RODATA|NOPTR, $2\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("File.Data output missing %q\nfull:\n%s", want, got)
+		}
+	}
+}
 
 func TestFunctionStringWithFlags(t *testing.T) {
 	fn := NewFunction("add", "NOSPLIT", 0, 24)

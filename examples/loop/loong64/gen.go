@@ -19,7 +19,7 @@ func main() {
 		Raw("MOVV $0, R6").
 		Label("loop").
 		Raw("BEQ R5, R0, done").
-		Raw("MOVV (R4), R7").
+		LoadIndirect("R4", loong64.Int64, "R7").
 		Raw("ADDV R7, R6, R6").
 		Raw("ADDV $8, R4, R4").
 		Raw("ADDV $-1, R5, R5").

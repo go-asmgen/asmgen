@@ -20,7 +20,7 @@ func main() {
 		Label("loop").
 		Raw("TESTQ BX, BX").
 		Raw("JZ done").
-		Raw("MOVQ (AX), DX").
+		LoadIndirect("AX", amd64.Int64, "DX").
 		Raw("ADDQ DX, CX").
 		Raw("ADDQ $8, AX").
 		Raw("DECQ BX").

@@ -120,6 +120,18 @@ func TestLabel(t *testing.T) {
 	}
 }
 
+func TestIndirect(t *testing.T) {
+	got := NewFunc("f", Layout(nil, nil, nil, nil), 0).
+		LoadIndirect("R4", Int64, "R5").  // MOVV (R4), R5
+		StoreIndirect("R5", "R4", Uint8). // MOVB R5, (R4)
+		Ret().Func().String()
+	for _, line := range []string{"\tMOVV (R4), R5\n", "\tMOVB R5, (R4)\n"} {
+		if !strings.Contains(got, line) {
+			t.Errorf("missing %q\n%s", line, got)
+		}
+	}
+}
+
 func TestStoreRetPanicsOnUnknownRet(t *testing.T) {
 	sig := Layout([]string{"a"}, []Type{Int64}, []string{"ret"}, []Type{Int64})
 	b := NewFunc("f", sig, 0)
