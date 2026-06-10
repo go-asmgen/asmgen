@@ -1,45 +1,58 @@
 # go-asmgen
 
 Ergonomic generation of Go-compatible Plan 9 assembly for non-amd64
-architectures, starting with **arm64**. Encoding is delegated to the Go
+architectures — **arm64** and **riscv64**. Encoding is delegated to the Go
 toolchain assembler (`cmd/asm`); go-asmgen computes the ABI0 frame layout and
 emits well-formed Plan 9 instruction text.
 
 This is the multi-architecture counterpart to what `avo` does for amd64. avo
 encodes instruction bytes itself, which is exactly what makes extending it to
 new ISAs expensive. go-asmgen instead emits Plan 9 text and lets `cmd/asm`
-encode, so each new architecture only needs an ABI layout model plus a thin
-instruction-emit surface.
+encode, so each new architecture only needs a thin move/register surface over
+the **shared** ABI0 layout model. riscv64 is exactly that: it reuses
+[`internal/abi`](internal/abi) unchanged and differs from arm64 only in
+mnemonics (e.g. `MOV` vs `MOVD` for 8-byte ints, `MOVF`/`MOVD` vs `FMOVS`/`FMOVD`
+for floats).
 
 ## Status
 
-v0 — arm64, **ABI0**. Correct for sequences of arm64 **scalars** in any
+v0 — **arm64** and **riscv64**, **ABI0**. Correct for sequences of scalars in any
 combination: signed/unsigned integers of 1/2/4/8 bytes, pointers, and 32/64-bit
-floats. The builder selects the right move per type (`MOVB`/`MOVBU`, `MOVH`/`MOVHU`,
-`MOVW`/`MOVWU`, `MOVD`, `FMOVS`/`FMOVD`) and computes ABI0 offsets (results
-word-aligned, sub-word loads sign/zero-extended). Every emitted offset and access
-width is cross-checked by `go vet` asmdecl and exercised by runtime tests on
-native arm64.
+floats. Each builder selects the right move per type and the shared layout
+computes ABI0 offsets (result area word-aligned, sub-word loads sign/zero-
+extended). Every emitted offset and access width is cross-checked by `go vet`
+asmdecl and exercised by runtime tests — natively on arm64, and under qemu-user
+for riscv64.
 
 Not yet correct for structs, arrays, or vector (V-register) values.
 
 ## Validate locally (Go toolchain required)
 
-These steps are the real test of correctness; run them on an arm64 host (Apple
-Silicon, arm64 Linux, or qemu/Rosetta).
+The library packages (`arm64`, `riscv64`, `internal/abi`, `internal/emit`) are
+architecture-independent and held to 100% test coverage:
 
 ```sh
-go generate ./examples/...        # runs each gen.go -> writes *_arm64.s
-GOARCH=arm64 go vet ./examples/... # asmdecl cross-checks .s offsets vs decls
-GOARCH=arm64 go build ./examples/...
-go test ./examples/...            # runtime correctness on arm64
+go test ./arm64/... ./riscv64/... ./internal/...
 ```
 
-The library packages (`arm64`, `internal/emit`) are architecture-independent and
-held to 100% test coverage:
+The generated assembly is the real test of correctness. On an arm64 host (Apple
+Silicon or arm64 Linux):
 
 ```sh
-go test ./arm64/... ./internal/...
+go generate ./examples/add/... ./examples/types/...
+GOARCH=arm64 go vet ./examples/add/... ./examples/types/...   # asmdecl
+go test ./examples/add/... ./examples/types/...               # runtime
+```
+
+riscv64 has no common native host, so validate it statically anywhere
+(asmdecl + `cmd/asm`) and run it under emulation:
+
+```sh
+go generate ./examples/riscv64/...
+GOOS=linux GOARCH=riscv64 go vet ./examples/riscv64/...    # asmdecl
+GOOS=linux GOARCH=riscv64 go build ./examples/riscv64/...  # cmd/asm checks mnemonics
+# runtime under qemu-user (e.g. in CI), or via Docker's riscv64 emulation:
+GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/riscv64/...
 ```
 
 ### Validation priorities (in order)
@@ -58,10 +71,11 @@ go test ./arm64/... ./internal/...
 - v0: arm64, ABI0, 8-byte int/ptr args. (done)
 - Widen arm64 scalar support: 1/2/4-byte signed/unsigned ints, pointers, float
   regs (F0.., `FMOVS`/`FMOVD`), word-aligned result area, sub-word sign/zero
-  extension. Validated against asmdecl + runtime tests. (done — here)
+  extension. Validated against asmdecl + runtime tests. (done)
+- Extract the shared ABI0 model (`internal/abi`) and add **riscv64** as a thin
+  second architecture over it, runtime-proven under qemu-user. (done — here)
 - Structs, arrays, and vector (V-register) values.
-- riscv64 (start RV64GC), reusing the emit layer.
-- loong64.
+- loong64, reusing the shared layout model.
 - Optional: derive instruction mnemonic tables from cmd/internal/obj to catch
   typos at generation time (still delegating encoding to cmd/asm).
 

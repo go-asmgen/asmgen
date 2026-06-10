@@ -10,9 +10,10 @@ permissions:
   contents: read
 
 jobs:
-  # The library (arm64 layout model + ISA-agnostic emit) is ordinary
-  # architecture-independent Go: it builds and is coverage-gated everywhere.
-  # The generated assembly is NOT exercised here — that is the asm-arm64 job.
+  # The library (shared ABI0 model + per-arch builders + ISA-agnostic emit) is
+  # ordinary architecture-independent Go: it builds and is coverage-gated
+  # everywhere. The generated assembly is NOT exercised here — that is the
+  # asm-<arch> jobs.
   lib:
     name: lib (${{ matrix.os }} / go${{ matrix.go }})
     runs-on: ${{ matrix.os }}
@@ -35,20 +36,20 @@ jobs:
         run: go version
 
       - name: Vet
-        run: go vet ./arm64/... ./internal/...
+        run: go vet ./arm64/... ./riscv64/... ./internal/...
 
       - name: Build
-        run: go build ./arm64/... ./internal/...
+        run: go build ./arm64/... ./riscv64/... ./internal/...
 
       - name: Test + 100% coverage gate
         shell: bash
         run: |
-          go test -race -coverprofile=cover.out ./arm64/... ./internal/...
+          go test -race -coverprofile=cover.out ./arm64/... ./riscv64/... ./internal/...
           go tool cover -func=cover.out | tee cover.txt
           # Org-wide hard rule: the library is held to 100% statement coverage.
           # Every branch must be reachable from a test or the dead code is
-          # removed — the bar is never lowered. The example package carries no
-          # statements (it is a generated-asm integration check, see asm-arm64).
+          # removed — the bar is never lowered. The example packages carry no
+          # statements (they are generated-asm integration checks, see asm-*).
           cov=$(go tool cover -func=cover.out | tail -n 1 | awk '{print $3}' | tr -d '%')
           echo "library coverage: ${cov}%"
           awk -v t="$cov" 'BEGIN { exit !(t+0 >= 100.0) }' || {
@@ -90,15 +91,54 @@ jobs:
 
       - name: Regenerate assembly and check it is committed
         run: |
-          go generate ./examples/...
-          git diff --exit-code -- examples || {
-            echo "::error::generated assembly is stale; run 'go generate ./examples/...' and commit"; exit 1; }
+          go generate ./examples/add/... ./examples/types/...
+          git diff --exit-code -- examples/add examples/types || {
+            echo "::error::generated arm64 assembly is stale; run go generate and commit"; exit 1; }
 
       - name: Vet (asmdecl)
-        run: go vet ./examples/...
+        run: go vet ./examples/add/... ./examples/types/...
 
       - name: Build
-        run: go build ./examples/...
+        run: go build ./examples/add/... ./examples/types/...
 
       - name: Test (runtime correctness on native arm64)
-        run: go test ./examples/...
+        run: go test ./examples/add/... ./examples/types/...
+
+  # riscv64 has no GitHub-hosted runner, so this job cross-compiles on amd64 and
+  # runs the generated assembly under qemu-user (binfmt). asmdecl and cmd/asm
+  # still validate offsets and mnemonics statically; qemu provides the runtime
+  # proof that the emitted RISC-V instructions compute the right answers.
+  asm-riscv64:
+    name: asm-riscv64 (go${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ["1.22", "1.23"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+
+      - name: Install qemu-user-static
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+
+      - name: Regenerate assembly and check it is committed
+        run: |
+          go generate ./examples/riscv64/...
+          git diff --exit-code -- examples/riscv64 || {
+            echo "::error::generated riscv64 assembly is stale; run go generate and commit"; exit 1; }
+
+      - name: Vet (asmdecl)
+        run: GOOS=linux GOARCH=riscv64 go vet ./examples/riscv64/...
+
+      - name: Build (cmd/asm validates mnemonics)
+        run: GOOS=linux GOARCH=riscv64 go build ./examples/riscv64/...
+
+      - name: Test (runtime correctness under qemu-riscv64)
+        run: GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/riscv64/...

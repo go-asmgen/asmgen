@@ -1,8 +1,14 @@
-// Package arm64 provides an ergonomic, ABI0-targeted builder that emits
-// Plan 9 assembly for the arm64 architecture. Encoding is delegated to the Go
-// toolchain's assembler (cmd/asm); this package only computes the ABI0 frame
-// layout and emits well-formed Plan 9 instruction text.
-package arm64
+// Package riscv64 provides an ergonomic, ABI0-targeted builder that emits
+// Plan 9 assembly for the riscv64 architecture. Encoding is delegated to the Go
+// toolchain's assembler (cmd/asm); this package only drives the move-selection
+// surface and emits well-formed Plan 9 instruction text.
+//
+// The ABI0 frame layout is identical to every other 64-bit target and is shared
+// from internal/abi — demonstrating the core go-asmgen thesis: a new
+// architecture is just register names plus a move table over the same layout
+// model. riscv64 differs from arm64 only in those mnemonics: the 8-byte integer
+// move is MOV (not MOVD), and floats use MOVF (single) / MOVD (double).
+package riscv64
 
 import (
 	"fmt"
@@ -11,14 +17,9 @@ import (
 	"github.com/go-asmgen/asmgen/internal/emit"
 )
 
-// The ABI0 frame layout (offsets, alignment, word size) is architecture-
-// independent and lives in internal/abi; arm64 differs from the other 64-bit
-// targets only in register names and move mnemonics. These aliases and the
-// Layout wrapper let callers stay entirely within the arm64 package.
-//
-// This is correct for sequences of arm64 scalars — signed/unsigned integers of
-// 1/2/4/8 bytes, pointers, and 32/64-bit floats — in any combination. It is NOT
-// yet correct for structs, arrays, or vector (V-register) values.
+// Re-exported ABI0 model (see internal/abi). Correct for sequences of riscv64
+// scalars — signed/unsigned integers of 1/2/4/8 bytes, pointers, and 32/64-bit
+// floats — in any combination; not yet structs, arrays, or vectors.
 type (
 	// Type describes one ABI0 scalar parameter type. See abi.Type.
 	Type = abi.Type
@@ -50,15 +51,16 @@ func Layout(argNames []string, argTypes []Type, retNames []string, retTypes []Ty
 	return abi.Layout(argNames, argTypes, retNames, retTypes)
 }
 
-// loadMnemonic returns the Plan 9 arm64 move that loads a value of type t from
-// memory into a register. Sub-word integer loads pick the sign- or
-// zero-extending form so the full register holds the correct value.
+// loadMnemonic returns the Plan 9 riscv64 move that loads a value of type t into
+// a register. Sub-word integer loads pick the sign- or zero-extending form so
+// the full register holds the correct value. Note MOV (not MOVD) is the 8-byte
+// integer move; MOVF/MOVD are the float moves.
 func loadMnemonic(t Type) string {
 	if t.Float {
 		if t.Size == 4 {
-			return "FMOVS"
+			return "MOVF"
 		}
-		return "FMOVD"
+		return "MOVD"
 	}
 	switch t.Size {
 	case 1:
@@ -77,18 +79,19 @@ func loadMnemonic(t Type) string {
 		}
 		return "MOVWU"
 	default:
-		return "MOVD"
+		return "MOV"
 	}
 }
 
-// storeMnemonic returns the Plan 9 arm64 move that stores a register into a slot
-// of type t. Stores write exactly the type's width, so signedness is irrelevant.
+// storeMnemonic returns the Plan 9 riscv64 move that stores a register into a
+// slot of type t. Stores write exactly the type's width, so signedness is
+// irrelevant.
 func storeMnemonic(t Type) string {
 	if t.Float {
 		if t.Size == 4 {
-			return "FMOVS"
+			return "MOVF"
 		}
-		return "FMOVD"
+		return "MOVD"
 	}
 	switch t.Size {
 	case 1:
@@ -98,7 +101,7 @@ func storeMnemonic(t Type) string {
 	case 4:
 		return "MOVW"
 	default:
-		return "MOVD"
+		return "MOV"
 	}
 }
 
@@ -106,15 +109,15 @@ func storeMnemonic(t Type) string {
 // Builder
 // ----------------------------------------------------------------------------
 
-// Builder constructs one arm64 function.
+// Builder constructs one riscv64 function.
 type Builder struct {
 	fn  *emit.Function
 	sig Signature
 }
 
-// NewFunc starts an ABI0 arm64 function. frameSize is the local frame (0 if the
-// function uses no stack locals). The function is marked NOSPLIT by default for
-// simplicity in v0 (no stack-growth preamble); revisit for large frames.
+// NewFunc starts an ABI0 riscv64 function. frameSize is the local frame (0 if
+// the function uses no stack locals). The function is marked NOSPLIT by default
+// for simplicity in v0 (no stack-growth preamble); revisit for large frames.
 func NewFunc(name string, sig Signature, frameSize int) *Builder {
 	return &Builder{
 		fn:  emit.NewFunction(name, "NOSPLIT", frameSize, sig.ArgsSize),
@@ -123,7 +126,7 @@ func NewFunc(name string, sig Signature, frameSize int) *Builder {
 }
 
 // LoadArg emits a move of the named argument into register reg. The move width
-// and register file follow the argument's type (e.g. "R0" for ints/pointers,
+// and register file follow the argument's type (e.g. "X5" for ints/pointers,
 // "F0" for floats).
 func (b *Builder) LoadArg(name, reg string) *Builder {
 	p := b.lookup(b.sig.Args, name)
@@ -139,7 +142,7 @@ func (b *Builder) StoreRet(reg, name string) *Builder {
 	return b
 }
 
-// Raw appends an arbitrary Plan 9 arm64 instruction (escape hatch for the
+// Raw appends an arbitrary Plan 9 riscv64 instruction (escape hatch for the
 // arithmetic/logic the v0 emit surface does not model directly).
 func (b *Builder) Raw(format string, args ...any) *Builder {
 	b.fn.Insn(format, args...)
@@ -157,5 +160,5 @@ func (b *Builder) lookup(ps []Param, name string) Param {
 			return p
 		}
 	}
-	panic(fmt.Sprintf("arm64: unknown param %q", name))
+	panic(fmt.Sprintf("riscv64: unknown param %q", name))
 }
