@@ -167,18 +167,25 @@ jobs:
 
       - name: Regenerate assembly and check it is committed
         run: |
-          go generate ./examples/riscv64/...
-          git diff --exit-code -- examples/riscv64 || {
+          go generate ./examples/riscv64/... ./examples/simd/riscv64/...
+          git diff --exit-code -- examples/riscv64 examples/simd/riscv64 || {
             echo "::error::generated riscv64 assembly is stale; run go generate and commit"; exit 1; }
 
       - name: Vet (asmdecl)
-        run: GOOS=linux GOARCH=riscv64 go vet ./examples/riscv64/...
+        run: GOOS=linux GOARCH=riscv64 go vet ./examples/riscv64/... ./examples/simd/riscv64/...
 
       - name: Build (cmd/asm validates mnemonics)
-        run: GOOS=linux GOARCH=riscv64 go build ./examples/riscv64/...
+        run: GOOS=linux GOARCH=riscv64 go build ./examples/riscv64/... ./examples/simd/riscv64/...
 
-      - name: Test (runtime correctness under qemu-riscv64)
+      - name: Test scalar (runtime correctness under qemu-riscv64)
         run: GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/riscv64/...
+
+      # SIMD needs the V extension enabled in the emulated CPU. Isolated so a
+      # qemu without RVV can't fail the scalar runtime above.
+      - name: Test SIMD/RVV (runtime under qemu with vectors)
+        env:
+          QEMU_CPU: rv64,v=true,vlen=128
+        run: GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/simd/riscv64/...
 
   # loong64 (LoongArch 64-bit) follows the same recipe as riscv64: no native
   # runner, so cross-compile on amd64 and run the generated assembly under
@@ -206,15 +213,22 @@ jobs:
 
       - name: Regenerate assembly and check it is committed
         run: |
-          go generate ./examples/loong64/...
-          git diff --exit-code -- examples/loong64 || {
+          go generate ./examples/loong64/... ./examples/simd/loong64/...
+          git diff --exit-code -- examples/loong64 examples/simd/loong64 || {
             echo "::error::generated loong64 assembly is stale; run go generate and commit"; exit 1; }
 
       - name: Vet (asmdecl)
-        run: GOOS=linux GOARCH=loong64 go vet ./examples/loong64/...
+        run: GOOS=linux GOARCH=loong64 go vet ./examples/loong64/... ./examples/simd/loong64/...
 
       - name: Build (cmd/asm validates mnemonics)
-        run: GOOS=linux GOARCH=loong64 go build ./examples/loong64/...
+        run: GOOS=linux GOARCH=loong64 go build ./examples/loong64/... ./examples/simd/loong64/...
 
-      - name: Test (runtime correctness under qemu-loongarch64)
+      - name: Test scalar (runtime correctness under qemu-loongarch64)
         run: GOARCH=loong64 go test -exec=qemu-loongarch64-static ./examples/loong64/...
+
+      # LSX is part of the la464 CPU qemu emulates by default. Isolated like the
+      # RVV step so a qemu without LSX can't fail the scalar runtime above.
+      - name: Test SIMD/LSX (runtime under qemu with vectors)
+        env:
+          QEMU_CPU: la464
+        run: GOARCH=loong64 go test -exec=qemu-loongarch64-static ./examples/simd/loong64/...
