@@ -36,15 +36,15 @@ jobs:
         run: go version
 
       - name: Vet
-        run: go vet ./arm64/... ./riscv64/... ./internal/...
+        run: go vet ./arm64/... ./riscv64/... ./loong64/... ./internal/...
 
       - name: Build
-        run: go build ./arm64/... ./riscv64/... ./internal/...
+        run: go build ./arm64/... ./riscv64/... ./loong64/... ./internal/...
 
       - name: Test + 100% coverage gate
         shell: bash
         run: |
-          go test -race -coverprofile=cover.out ./arm64/... ./riscv64/... ./internal/...
+          go test -race -coverprofile=cover.out ./arm64/... ./riscv64/... ./loong64/... ./internal/...
           go tool cover -func=cover.out | tee cover.txt
           # Org-wide hard rule: the library is held to 100% statement coverage.
           # Every branch must be reachable from a test or the dead code is
@@ -142,3 +142,42 @@ jobs:
 
       - name: Test (runtime correctness under qemu-riscv64)
         run: GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/riscv64/...
+
+  # loong64 (LoongArch 64-bit) follows the same recipe as riscv64: no native
+  # runner, so cross-compile on amd64 and run the generated assembly under
+  # qemu-user. The shared ABI0 layout is unchanged; only the move table differs
+  # (MOVV for 8-byte ints, MOVF/MOVD for floats).
+  asm-loong64:
+    name: asm-loong64 (go${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ["1.22", "1.23"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+
+      - name: Install qemu-user-static
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+
+      - name: Regenerate assembly and check it is committed
+        run: |
+          go generate ./examples/loong64/...
+          git diff --exit-code -- examples/loong64 || {
+            echo "::error::generated loong64 assembly is stale; run go generate and commit"; exit 1; }
+
+      - name: Vet (asmdecl)
+        run: GOOS=linux GOARCH=loong64 go vet ./examples/loong64/...
+
+      - name: Build (cmd/asm validates mnemonics)
+        run: GOOS=linux GOARCH=loong64 go build ./examples/loong64/...
+
+      - name: Test (runtime correctness under qemu-loongarch64)
+        run: GOARCH=loong64 go test -exec=qemu-loongarch64-static ./examples/loong64/...
