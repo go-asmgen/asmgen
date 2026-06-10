@@ -115,16 +115,16 @@ GOOS=linux GOARCH=riscv64 go build ./examples/riscv64/...  # cmd/asm checks mnem
 GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/riscv64/...
 ```
 
-### Validation priorities (in order)
+### What CI checks (in order)
 
-1. **`go vet` asmdecl passes.** This is the cheapest, strongest check: it
-   verifies every `name+offset(FP)` in the .s matches the Go declaration. If
-   offsets are wrong, vet catches it before runtime.
-2. **Differential encoding check.** For each emitted instruction, also hand-write
-   the same Plan 9 line, assemble both with `go tool asm -S`, and diff the bytes.
-   Wire this into CI as the correctness guarantee.
-3. **Runtime test on real arm64** (CI: GitHub Actions `ubuntu-24.04-arm`, or
-   qemu-user, or Apple Silicon).
+1. **`go vet` asmdecl passes.** The cheapest, strongest check: it verifies every
+   `name+offset(FP)` in the `.s` matches the Go declaration. Wrong offsets are
+   caught before runtime.
+2. **`cmd/asm` accepts every instruction**, and the committed `.s` is regenerated
+   and diffed — a stale or invalid `.s` fails the build.
+3. **Runtime test** — the function is actually called and its result checked:
+   natively on amd64 and arm64 runners, under qemu-user for riscv64 and loong64.
+4. **100% library coverage** is gated on `abi`, `emit`, and the four builders.
 
 ## Roadmap
 
