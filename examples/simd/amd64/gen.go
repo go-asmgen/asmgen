@@ -11,24 +11,35 @@ import (
 	"github.com/go-asmgen/asmgen/emit"
 )
 
-func main() {
-	f := emit.NewFile("amd64")
-
-	// func addI32x4(a, b, out *[4]int32) — SSE2 packed 32-bit add.
-	sig := amd64.Layout(
+func ptrSig() amd64.Signature {
+	return amd64.Layout(
 		[]string{"a", "b", "out"}, []amd64.Type{amd64.Ptr, amd64.Ptr, amd64.Ptr},
 		nil, nil,
 	)
-	b := amd64.NewFunc("addI32x4", sig, 0)
-	b.LoadArg("a", "AX").
-		LoadArg("b", "BX").
-		LoadArg("out", "CX").
-		Raw("MOVOU (AX), X0"). // load 4 int32 lanes
+}
+
+func main() {
+	f := emit.NewFile("amd64")
+
+	// SSE2: 4 x int32 packed add.
+	sse := amd64.NewFunc("addI32x4", ptrSig(), 0)
+	sse.LoadArg("a", "AX").LoadArg("b", "BX").LoadArg("out", "CX").
+		Raw("MOVOU (AX), X0").
 		Raw("MOVOU (BX), X1").
-		Raw("PADDL X1, X0").   // packed add, dword lanes
-		Raw("MOVOU X0, (CX)"). // store 4 lanes
+		Raw("PADDL X1, X0").
+		Raw("MOVOU X0, (CX)").
 		Ret()
-	f.Add(b.Func())
+	f.Add(sse.Func())
+
+	// AVX2: 8 x int32 packed add (256-bit Y registers).
+	avx := amd64.NewFunc("addI32x8", ptrSig(), 0)
+	avx.LoadArg("a", "AX").LoadArg("b", "BX").LoadArg("out", "CX").
+		Raw("VMOVDQU (AX), Y0").
+		Raw("VMOVDQU (BX), Y1").
+		Raw("VPADDD Y1, Y0, Y2").
+		Raw("VMOVDQU Y2, (CX)").
+		Ret()
+	f.Add(avx.Func())
 
 	if err := os.WriteFile("simd_amd64.s", []byte(f.String()), 0o644); err != nil {
 		fmt.Fprintln(os.Stderr, err)
