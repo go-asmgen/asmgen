@@ -1,0 +1,59 @@
+--- a/src/cmd/internal/obj/loong64/a.out.go
++++ b/src/cmd/internal/obj/loong64/a.out.go
+@@ -747,6 +747,9 @@
+ 	AVMOVQ
+ 	AXVMOVQ
+ 
++	// LSX vector-to-GPR lane extract (vpickve2gr.d)
++	AVPICKVE2GRV
++
+ 	// LSX and LASX arithmetic instructions
+ 	AVADDB
+ 	AVADDH
+--- a/src/cmd/internal/obj/loong64/anames.go
++++ b/src/cmd/internal/obj/loong64/anames.go
+@@ -263,6 +263,7 @@
+ 	"FTINTRNEVD",
+ 	"VMOVQ",
+ 	"XVMOVQ",
++	"VPICKVE2GRV",
+ 	"VADDB",
+ 	"VADDH",
+ 	"VADDW",
+--- a/src/cmd/internal/obj/loong64/asm.go
++++ b/src/cmd/internal/obj/loong64/asm.go
+@@ -415,6 +415,8 @@
+ 	{AXVMOVQ, C_XREG, C_NONE, C_NONE, C_ARNG, C_NONE, 42, 4, 0, 0},
+ 
+ 	{AVMOVQ, C_ELEM, C_NONE, C_NONE, C_ARNG, C_NONE, 45, 4, 0, 0},
++
++	{AVPICKVE2GRV, C_U8CON, C_VREG, C_NONE, C_REG, C_NONE, 73, 4, 0, 0},
+ 
+ 	{APRELD, C_SOREG, C_U5CON, C_NONE, C_NONE, C_NONE, 46, 4, 0, 0},
+ 	{APRELDX, C_SOREG, C_DCON, C_U5CON, C_NONE, C_NONE, 47, 20, 0, 0},
+@@ -1736,6 +1738,9 @@
+ 			opset(AXVSHUF4IW, r0)
+ 			opset(AXVSHUF4IV, r0)
+ 
++		case AVPICKVE2GRV:
++			// standalone vector-to-GPR lane extract; no aliases
++
+ 		case AVANDV:
+ 			opset(AVORV, r0)
+ 			opset(AVXORV, r0)
+@@ -2833,6 +2838,15 @@
+ 			o3 = OP_12IRR(c.opirr(ALU52ID), uint32(v>>52), uint32(REGTMP), uint32(REGTMP))
+ 		}
+ 		o4 = OP_RRR(c.oprrr(p.As), uint32(REGTMP), uint32(r), uint32(p.To.Reg))
++
++	case 73: // vpickve2gr.d $ui1, Vj, Rd
++		// vector-to-GPR doubleword lane extract.
++		// encoding: 0x72eff000 | (index<<10) | (Vj<<5) | Rd
++		index := uint32(c.regoff(&p.From))
++		c.checkoperand(p, index, 1)
++		Vj := uint32(p.Reg & EXT_REG_MASK)
++		Rd := uint32(p.To.Reg & EXT_REG_MASK)
++		o1 = 0x72eff000 | (index << 10) | (Vj << 5) | Rd
+ 	}
+ 
+ 	out[0] = o1
