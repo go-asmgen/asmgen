@@ -58,20 +58,110 @@ func Align(n, to int) int { return (n + to - 1) &^ (to - 1) }
 // exact offsets `go vet` asmdecl expects (e.g. func(a,b int16) int16 lays out
 // a@0, b@2, ret@8, size 10).
 func Layout(argNames []string, argTypes []Type, retNames []string, retTypes []Type) Signature {
+	args := make([]Arg, len(argTypes))
+	for i, t := range argTypes {
+		args[i] = Scalar(argNames[i], t)
+	}
+	rets := make([]Arg, len(retTypes))
+	for i, t := range retTypes {
+		rets[i] = Scalar(retNames[i], t)
+	}
+	return LayoutArgs(args, rets)
+}
+
+// ----------------------------------------------------------------------------
+// Aggregates
+//
+// A struct/slice/string parameter occupies a contiguous region laid out by Go's
+// struct rules: fields in declaration order, each at its natural alignment; the
+// region is aligned to the aggregate's alignment (its largest field) and sized
+// up to a multiple of it. In hand-written assembly each leaf field is addressed
+// as `param_field+offset(FP)`, which is exactly what asmdecl checks — so Layout
+// flattens an aggregate into one Param per field with that conventional name.
+// ----------------------------------------------------------------------------
+
+// Field is one member of an aggregate parameter.
+type Field struct {
+	Name string
+	Type Type
+}
+
+// Arg describes one ABI0 parameter for LayoutArgs: a scalar (Type set, Fields
+// nil) or an aggregate (Fields set — a struct, slice, or string).
+type Arg struct {
+	Name   string
+	Type   Type
+	Fields []Field
+}
+
+// Scalar constructs a scalar argument.
+func Scalar(name string, t Type) Arg { return Arg{Name: name, Type: t} }
+
+// Struct constructs an aggregate argument from explicit fields. Field names must
+// match the Go struct's exported field names so asmdecl accepts `name_Field`.
+func Struct(name string, fields ...Field) Arg { return Arg{Name: name, Fields: fields} }
+
+// Slice constructs a []T argument: the Go slice header {base, len, cap},
+// addressed as name_base / name_len / name_cap.
+func Slice(name string) Arg {
+	return Arg{Name: name, Fields: []Field{
+		{Name: "base", Type: Ptr},
+		{Name: "len", Type: Int64},
+		{Name: "cap", Type: Int64},
+	}}
+}
+
+// String constructs a string argument: the Go string header {base, len},
+// addressed as name_base / name_len.
+func String(name string) Arg {
+	return Arg{Name: name, Fields: []Field{
+		{Name: "base", Type: Ptr},
+		{Name: "len", Type: Int64},
+	}}
+}
+
+// aggregateAlign is the alignment of an aggregate: that of its widest field.
+func aggregateAlign(fields []Field) int {
+	a := 1
+	for _, f := range fields {
+		if f.Type.Size > a {
+			a = f.Type.Size
+		}
+	}
+	return a
+}
+
+// LayoutArgs computes ABI0 FP offsets for arbitrary scalar and aggregate
+// arguments and results, flattening each aggregate into one Param per field
+// named `arg_field`. Result area is word-aligned; the frame is sized to the end
+// of the last slot with no further rounding.
+func LayoutArgs(args, rets []Arg) Signature {
 	var sig Signature
 	off := 0
-	place := func(names []string, types []Type) []Param {
-		ps := make([]Param, 0, len(types))
-		for i, t := range types {
-			off = Align(off, t.Size)
-			ps = append(ps, Param{Name: names[i], Type: t, Offset: off})
-			off += t.Size
+	place := func(in []Arg) []Param {
+		var ps []Param
+		for _, a := range in {
+			if a.Fields == nil {
+				off = Align(off, a.Type.Size)
+				ps = append(ps, Param{Name: a.Name, Type: a.Type, Offset: off})
+				off += a.Type.Size
+				continue
+			}
+			al := aggregateAlign(a.Fields)
+			off = Align(off, al)
+			fieldOff := 0
+			for _, f := range a.Fields {
+				fieldOff = Align(fieldOff, f.Type.Size)
+				ps = append(ps, Param{Name: a.Name + "_" + f.Name, Type: f.Type, Offset: off + fieldOff})
+				fieldOff += f.Type.Size
+			}
+			off += Align(fieldOff, al) // struct size, with trailing padding
 		}
 		return ps
 	}
-	sig.Args = place(argNames, argTypes)
+	sig.Args = place(args)
 	off = Align(off, WordSize)
-	sig.Rets = place(retNames, retTypes)
+	sig.Rets = place(rets)
 	sig.ArgsSize = off
 	return sig
 }

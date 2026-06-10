@@ -28,7 +28,12 @@ extended). Every emitted offset and access width is cross-checked by `go vet`
 asmdecl and exercised by runtime tests — natively on arm64, and under qemu-user
 for riscv64 and loong64.
 
-Not yet correct for structs, arrays, or vector (V-register) values.
+**Aggregates** are supported too: struct, slice, and string parameters are laid
+out by Go's struct rules and each field is addressed as `name_field+offset(FP)`
+(e.g. `s_base`/`s_len`/`s_cap` for a slice) — exactly what asmdecl validates. See
+[`examples/aggregate`](examples/aggregate).
+
+Not yet correct for arrays or vector (V-register) values.
 
 ## Validate locally (Go toolchain required)
 
@@ -80,8 +85,11 @@ GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/riscv64/...
 - Extract the shared ABI0 model (`internal/abi`) and add **riscv64** as a thin
   second architecture over it, runtime-proven under qemu-user. (done)
 - Add **loong64** as a third architecture — same recipe, just a move table
-  (`MOVV`, `MOVF`/`MOVD`), runtime-proven under qemu-user. (done — here)
-- Structs, arrays, and vector (V-register) values.
+  (`MOVV`, `MOVF`/`MOVD`), runtime-proven under qemu-user. (done)
+- **Aggregates**: struct/slice/string parameters laid out by Go's struct rules,
+  fields addressed as `name_field+offset(FP)`, asmdecl- and runtime-validated.
+  (done — here)
+- Arrays, and vector (V-register) values.
 - Optional: derive instruction mnemonic tables from cmd/internal/obj to catch
   typos at generation time (still delegating encoding to cmd/asm).
 

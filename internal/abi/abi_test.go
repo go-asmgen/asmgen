@@ -79,3 +79,81 @@ func TestLayoutWordAlignsResults(t *testing.T) {
 		t.Errorf("ArgsSize = %d want 10", sig.ArgsSize)
 	}
 }
+
+// byName indexes Params by name for offset assertions.
+func byName(ps []Param) map[string]int {
+	m := make(map[string]int, len(ps))
+	for _, p := range ps {
+		m[p.Name] = p.Offset
+	}
+	return m
+}
+
+func TestLayoutArgsStruct(t *testing.T) {
+	// func f(p struct{A, B int64}) int64
+	sig := LayoutArgs(
+		[]Arg{Struct("p", Field{"A", Int64}, Field{"B", Int64})},
+		[]Arg{Scalar("ret", Int64)},
+	)
+	off := byName(sig.Args)
+	if off["p_A"] != 0 || off["p_B"] != 8 {
+		t.Errorf("struct field offsets = %v want p_A@0 p_B@8", off)
+	}
+	if sig.Rets[0].Offset != 16 || sig.ArgsSize != 24 {
+		t.Errorf("ret@%d size %d want ret@16 size 24", sig.Rets[0].Offset, sig.ArgsSize)
+	}
+}
+
+func TestLayoutArgsStructPadding(t *testing.T) {
+	// func f(m struct{Flag int8; N int64}) int64 — N padded to 8, struct size 16.
+	sig := LayoutArgs(
+		[]Arg{Struct("m", Field{"Flag", Int8}, Field{"N", Int64})},
+		[]Arg{Scalar("ret", Int64)},
+	)
+	off := byName(sig.Args)
+	if off["m_Flag"] != 0 || off["m_N"] != 8 {
+		t.Errorf("padded struct offsets = %v want m_Flag@0 m_N@8", off)
+	}
+	if sig.Rets[0].Offset != 16 { // struct occupies [0,16)
+		t.Errorf("ret offset = %d want 16", sig.Rets[0].Offset)
+	}
+}
+
+func TestLayoutArgsSlice(t *testing.T) {
+	// func f(s []int64) int64
+	sig := LayoutArgs([]Arg{Slice("s")}, []Arg{Scalar("ret", Int64)})
+	off := byName(sig.Args)
+	if off["s_base"] != 0 || off["s_len"] != 8 || off["s_cap"] != 16 {
+		t.Errorf("slice header offsets = %v want base@0 len@8 cap@16", off)
+	}
+	if sig.Rets[0].Offset != 24 || sig.ArgsSize != 32 {
+		t.Errorf("ret@%d size %d want ret@24 size 32", sig.Rets[0].Offset, sig.ArgsSize)
+	}
+}
+
+func TestLayoutArgsString(t *testing.T) {
+	// func f(x string) int
+	sig := LayoutArgs([]Arg{String("x")}, []Arg{Scalar("ret", Int64)})
+	off := byName(sig.Args)
+	if off["x_base"] != 0 || off["x_len"] != 8 {
+		t.Errorf("string header offsets = %v want base@0 len@8", off)
+	}
+	if sig.Rets[0].Offset != 16 {
+		t.Errorf("ret offset = %d want 16", sig.Rets[0].Offset)
+	}
+}
+
+func TestLayoutArgsScalarThenAggregate(t *testing.T) {
+	// func f(n int32, s []int64) int64 — slice region aligned to 8 after n.
+	sig := LayoutArgs(
+		[]Arg{Scalar("n", Int32), Slice("s")},
+		[]Arg{Scalar("ret", Int64)},
+	)
+	off := byName(sig.Args)
+	if off["n"] != 0 || off["s_base"] != 8 || off["s_len"] != 16 || off["s_cap"] != 24 {
+		t.Errorf("offsets = %v want n@0 s_base@8 s_len@16 s_cap@24", off)
+	}
+	if sig.Rets[0].Offset != 32 || sig.ArgsSize != 40 {
+		t.Errorf("ret@%d size %d want ret@32 size 40", sig.Rets[0].Offset, sig.ArgsSize)
+	}
+}
