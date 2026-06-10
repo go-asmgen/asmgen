@@ -30,18 +30,23 @@ sub-word loads sign/zero-extended). Every emitted offset and access width is
 cross-checked by `go vet` asmdecl and exercised by runtime tests — natively on
 amd64 and arm64, and under qemu-user for riscv64 and loong64.
 
-**Aggregates** are supported too: struct, slice, and string parameters are laid
-out by Go's struct rules and each field is addressed as `name_field+offset(FP)`
-(e.g. `s_base`/`s_len`/`s_cap` for a slice) — exactly what asmdecl validates. See
-[`examples/aggregate`](examples/aggregate).
+**Aggregates and arrays** are supported: struct, slice, and string parameters
+(fields addressed as `name_field+offset(FP)`, e.g. `s_base`/`s_len`/`s_cap`) and
+fixed-size `[n]T` arrays passed by value (element-wise, `name_0…name_(n-1)`).
+Every target has both examples — see [`examples`](examples).
 
-**SIMD** works through the `Raw` escape hatch over the loaded pointers: go-asmgen
-lays out the ABI0 frame and the vector body (SSE/AVX on amd64, NEON on arm64) is
-emitted directly. See [`examples/simd`](examples/simd) — packed-add, runtime
-tested. Vector *type* args (passing `[4]float32` by value) and `cmd/asm`-modelled
-vector helpers are future work.
+**SIMD** works through the `Raw` escape hatch over loaded pointers: go-asmgen lays
+out the ABI0 frame and the vector body is emitted directly. Runtime-tested
+packed-add on all four targets — **SSE2 + AVX2** (amd64), **NEON** (arm64),
+**RVV** (riscv64), **LSX + LASX** (loong64), up to 256-bit. See
+[`examples/simd`](examples/simd).
 
-Not yet correct for arrays as value parameters or first-class vector types.
+**Stack frames and TEXT flags**: `NewFuncFlags` emits any flags (`NOSPLIT`,
+`NOSPLIT|NOFRAME`, or none for the stack-growth preamble); `frameSize > 0`
+reserves locals addressed `name-N(SP)`. See [`examples/frame`](examples/frame).
+
+A typed vector-load helper (to drop the `Raw` boilerplate) and first-class vector
+*types* are the main remaining items.
 
 ## Use it as a library
 
