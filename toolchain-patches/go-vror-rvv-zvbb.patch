@@ -1,0 +1,82 @@
+--- src/cmd/internal/obj/riscv/cpu.go	2025-08-27 17:49:40
++++ b/src/cmd/internal/obj/riscv/cpu.go	2026-06-10 19:06:27
+@@ -1119,6 +1119,9 @@
+ 	AVMV4RV
+ 	AVMV8RV
+ 
++	// Zvbb: Vector Bit-manipulation used in Cryptography
++	AVRORVI
++
+ 	//
+ 	// Privileged ISA (version 20240411)
+ 	//
+--- src/cmd/internal/obj/riscv/anames.go	2025-08-27 17:49:40
++++ b/src/cmd/internal/obj/riscv/anames.go	2026-06-10 19:06:29
+@@ -607,6 +607,7 @@
+ 	"VMV2RV",
+ 	"VMV4RV",
+ 	"VMV8RV",
++	"VRORVI",
+ 	"ECALL",
+ 	"SCALL",
+ 	"EBREAK",
+--- src/cmd/internal/obj/riscv/inst.go	2025-08-27 17:49:40
++++ b/src/cmd/internal/obj/riscv/inst.go	2026-06-10 19:06:41
+@@ -1096,6 +1096,8 @@
+ 		return &inst{0x57, 0x0, 0x0, 0x0, -1472, 0x52}
+ 	case AVSRAVX:
+ 		return &inst{0x57, 0x4, 0x0, 0x0, -1472, 0x52}
++	case AVRORVI:
++		return &inst{0x57, 0x3, 0x0, 0x0, 1312, 0x28}
+ 	case AVSRLVI:
+ 		return &inst{0x57, 0x3, 0x0, 0x0, -1536, 0x50}
+ 	case AVSRLVV:
+--- src/cmd/internal/obj/riscv/obj.go	2025-08-27 17:49:40
++++ b/src/cmd/internal/obj/riscv/obj.go	2026-06-10 19:07:03
+@@ -2715,6 +2715,9 @@
+ 	AVMV4RV & obj.AMask: {enc: rVVEncoding},
+ 	AVMV8RV & obj.AMask: {enc: rVVEncoding},
+ 
++	// Zvbb: Vector Bit-manipulation used in Cryptography
++	AVRORVI & obj.AMask: {enc: rVVuEncoding},
++
+ 	//
+ 	// Privileged ISA
+ 	//
+@@ -3734,7 +3737,7 @@
+ 		ins.rd, ins.rs1, ins.rs2, ins.rs3 = uint32(p.To.Reg), uint32(p.Reg), uint32(p.From.Reg), obj.REG_NONE
+ 
+ 	case AVADDVI, AVRSUBVI, AVANDVI, AVORVI, AVXORVI, AVMSEQVI, AVMSNEVI, AVMSLEUVI, AVMSLEVI, AVMSGTUVI, AVMSGTVI,
+-		AVSLLVI, AVSRLVI, AVSRAVI, AVNSRLWI, AVNSRAWI, AVRGATHERVI, AVSLIDEUPVI, AVSLIDEDOWNVI:
++		AVSLLVI, AVSRLVI, AVSRAVI, AVNSRLWI, AVNSRAWI, AVRGATHERVI, AVSLIDEUPVI, AVSLIDEDOWNVI, AVRORVI:
+ 		// Set mask bit
+ 		switch {
+ 		case ins.rs3 == obj.REG_NONE:
+--- src/cmd/asm/internal/asm/testdata/riscv64.s	2025-08-27 17:49:40
++++ b/src/cmd/asm/internal/asm/testdata/riscv64.s	2026-06-10 19:08:29
+@@ -1284,6 +1284,13 @@
+ 	VMV4RV		V8, V4				// 57b2819e
+ 	VMV8RV		V8, V0				// 57b0839e
+ 
++	// Zvbb: Vector Bit-manipulation used in Cryptography
++	VRORVI		$7, V2, V3			// d7b12352
++	VRORVI		$16, V2, V3			// d7312852
++	VRORVI		$1, V2, V3			// d7b12052
++	VRORVI		$31, V2, V3			// d7b12f52
++	VRORVI		$7, V2, V0, V3			// d7b12350
++
+ 	//
+ 	// Privileged ISA
+ 	//
+--- src/cmd/asm/internal/asm/testdata/riscv64validation.s	2025-08-27 17:49:40
++++ b/src/cmd/asm/internal/asm/testdata/riscv64validation.s	2026-06-10 19:08:47
+@@ -427,5 +427,9 @@
+ 	VMV2RV		X10, V10			// ERROR "expected vector register in vs2 position"
+ 	VMV4RV		X10, V4				// ERROR "expected vector register in vs2 position"
+ 	VMV8RV		X10, V0				// ERROR "expected vector register in vs2 position"
++
++	// Zvbb: Vector Bit-manipulation used in Cryptography
++	VRORVI		$32, V2, V3			// ERROR "unsigned immediate 32 must be in range [0, 31]"
++	VRORVI		$-1, V2, V3			// ERROR "unsigned immediate -1 must be in range [0, 31]"
+ 
+ 	RET

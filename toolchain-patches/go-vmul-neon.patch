@@ -1,0 +1,76 @@
+--- a/src/cmd/internal/obj/arm64/a.out.go	2025-08-27 17:49:40
++++ b/src/cmd/internal/obj/arm64/a.out.go	2026-06-10 19:04:53
+@@ -952,6 +952,7 @@
+ 	AVADD
+ 	AVADDP
+ 	AVADDV
++	AVMUL
+ 	AVAND
+ 	AVBCAX
+ 	AVBIF
+--- a/src/cmd/internal/obj/arm64/anames.go	2025-08-27 17:49:40
++++ b/src/cmd/internal/obj/arm64/anames.go	2026-06-10 19:05:04
+@@ -469,6 +469,7 @@
+ 	"VADD",
+ 	"VADDP",
+ 	"VADDV",
++	"VMUL",
+ 	"VAND",
+ 	"VBCAX",
+ 	"VBIF",
+--- a/src/cmd/internal/obj/arm64/asm7.go	2025-08-27 17:49:40
++++ b/src/cmd/internal/obj/arm64/asm7.go	2026-06-10 19:05:33
+@@ -351,6 +351,7 @@
+ 	{AFCMPS, C_FCON, C_FREG, C_NONE, C_NONE, C_NONE, 56, 4, 0, 0, 0},
+ 	{AVADDP, C_ARNG, C_ARNG, C_NONE, C_ARNG, C_NONE, 72, 4, 0, 0, 0},
+ 	{AVADD, C_ARNG, C_ARNG, C_NONE, C_ARNG, C_NONE, 72, 4, 0, 0, 0},
++	{AVMUL, C_ARNG, C_ARNG, C_NONE, C_ARNG, C_NONE, 72, 4, 0, 0, 0},
+ 	{AVADD, C_VREG, C_VREG, C_NONE, C_VREG, C_NONE, 89, 4, 0, 0, 0},
+ 	{AVADD, C_VREG, C_NONE, C_NONE, C_VREG, C_NONE, 89, 4, 0, 0, 0},
+ 	{AVADDV, C_ARNG, C_NONE, C_NONE, C_VREG, C_NONE, 85, 4, 0, 0, 0},
+@@ -3221,6 +3222,9 @@
+ 			oprangeset(AVSUB, t)
+ 			oprangeset(AVRAX1, t)
+ 
++		case AVMUL:
++			break
++
+ 		case AAESD:
+ 			oprangeset(AAESE, t)
+ 			oprangeset(AAESMC, t)
+@@ -4761,6 +4765,10 @@
+ 			if af == ARNG_2D {
+ 				c.ctxt.Diag("invalid arrangement: %v", p)
+ 			}
++		case AVMUL:
++			if af == ARNG_2D {
++				c.ctxt.Diag("invalid arrangement: %v", p)
++			}
+ 		}
+ 		switch p.As {
+ 		case AVAND, AVEOR:
+@@ -6434,6 +6442,9 @@
+ 	case AVADD:
+ 		op = 7<<25 | 1<<21 | 1<<15 | 1<<10
+ 
++	case AVMUL:
++		op = 7<<25 | 1<<21 | 0x27<<10
++
+ 	case AVSUB:
+ 		op = 0x17<<25 | 1<<21 | 1<<15 | 1<<10
+ 
+--- a/src/cmd/asm/internal/asm/testdata/arm64.s	2025-08-27 17:49:40
++++ b/src/cmd/asm/internal/asm/testdata/arm64.s	2026-06-10 19:06:25
+@@ -112,6 +112,12 @@
+ 	VCMEQ	V1.H4, V2.H4, V3.H4             // 438c612e
+ 	VORR	V5.B16, V4.B16, V3.B16          // 831ca54e
+ 	VADD	V16.S4, V5.S4, V9.S4            // a984b04e
++	VMUL	V1.B8, V2.B8, V3.B8             // 439c210e
++	VMUL	V1.B16, V2.B16, V3.B16          // 439c214e
++	VMUL	V1.H4, V2.H4, V3.H4             // 439c610e
++	VMUL	V1.H8, V2.H8, V3.H8             // 439c614e
++	VMUL	V1.S2, V2.S2, V3.S2             // 439ca10e
++	VMUL	V1.S4, V2.S4, V3.S4             // 439ca14e
+ 	VEOR	V0.B16, V1.B16, V0.B16          // 201c206e
+ 	VADDV	V0.S4, V0                       // 00b8b14e
+ 	VMOVI	$82, V0.B16                     // 40e6024f
