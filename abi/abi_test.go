@@ -143,6 +143,41 @@ func TestLayoutArgsString(t *testing.T) {
 	}
 }
 
+func TestLayoutArgsArray(t *testing.T) {
+	// func f(a, b [4]int32) [4]int32 — each array is 16 bytes, 4-aligned.
+	sig := LayoutArgs(
+		[]Arg{Array("a", Int32, 4), Array("b", Int32, 4)},
+		[]Arg{Array("ret", Int32, 4)},
+	)
+	off := byName(sig.Args)
+	if off["a_0"] != 0 || off["a_3"] != 12 || off["b_0"] != 16 || off["b_3"] != 28 {
+		t.Errorf("array element offsets = %v", off)
+	}
+	if sig.Rets[0].Name != "ret_0" || sig.Rets[0].Offset != 32 {
+		t.Errorf("ret_0 = %+v want offset 32", sig.Rets[0])
+	}
+	if sig.ArgsSize != 48 { // 16+16 args, ret 16 at 32..48
+		t.Errorf("ArgsSize = %d want 48", sig.ArgsSize)
+	}
+}
+
+func TestSlot(t *testing.T) {
+	sig := LayoutArgs(
+		[]Arg{Scalar("n", Int64), Array("v", Int64, 3)},
+		[]Arg{Scalar("ret", Int64)},
+	)
+	// v's whole value begins at its element 0; n is 8 bytes, so v_0 is at 8.
+	if p, ok := sig.Slot("v_0"); !ok || p.Offset != 8 {
+		t.Errorf("Slot(v_0) = %+v,%v want offset 8", p, ok)
+	}
+	if p, ok := sig.Slot("ret"); !ok || p.Offset != 32 { // n(8)+v(24)=32
+		t.Errorf("Slot(ret) = %+v,%v want offset 32", p, ok)
+	}
+	if _, ok := sig.Slot("nope"); ok {
+		t.Error("Slot(nope) found unexpectedly")
+	}
+}
+
 func TestLayoutArgsScalarThenAggregate(t *testing.T) {
 	// func f(n int32, s []int64) int64 — slice region aligned to 8 after n.
 	sig := LayoutArgs(

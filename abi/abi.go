@@ -5,6 +5,8 @@
 // architecture package re-exports these types and drives its own emit surface.
 package abi
 
+import "strconv"
+
 // WordSize is the ABI0 register word size on the 64-bit targets modelled here.
 // The result area is aligned to it, and 8-byte values to it.
 const WordSize = 8
@@ -120,6 +122,19 @@ func String(name string) Arg {
 	}}
 }
 
+// Array constructs an [n]elem array argument. Its elements are laid out
+// contiguously and addressed as name_0 .. name_(n-1) — matching how asmdecl
+// names array elements. The whole array is also a valid component at name+0(FP)
+// (asmdecl appends a whole-value component for every type), which is what a
+// single vector load/store targets.
+func Array(name string, elem Type, n int) Arg {
+	fields := make([]Field, n)
+	for i := range fields {
+		fields[i] = Field{Name: strconv.Itoa(i), Type: elem}
+	}
+	return Arg{Name: name, Fields: fields}
+}
+
 // aggregateAlign is the alignment of an aggregate: that of its widest field.
 func aggregateAlign(fields []Field) int {
 	a := 1
@@ -164,4 +179,23 @@ func LayoutArgs(args, rets []Arg) Signature {
 	sig.Rets = place(rets)
 	sig.ArgsSize = off
 	return sig
+}
+
+// Slot returns the laid-out Param with the given name (a scalar's name, or a
+// flattened field/element such as "s_base" or "v_0") and whether it was found.
+// It is handy for reading an aggregate's base offset — e.g. an array's whole
+// value begins at the offset of its element 0 — when emitting a vector
+// load/store of the whole value through Raw.
+func (s Signature) Slot(name string) (Param, bool) {
+	for _, p := range s.Args {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	for _, p := range s.Rets {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	return Param{}, false
 }
