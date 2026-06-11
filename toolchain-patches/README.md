@@ -1,3 +1,18 @@
+# RESOLVED / OBSOLETE (2026-06-11)
+
+All three instructions are already available on Go master, so issue golang/go#79958
+was closed as obsolete and no CLs were mailed:
+
+- arm64 `VMUL` — upstream in commit b1c8857f95.
+- riscv64 `VRORVI` (zvbb) — upstream in commit 58efaf3859.
+- loong64 `vpickve2gr.d` — reachable via `VMOVQ Vj.V[index], Rd` (loong64/doc.go); no
+  separate mnemonic needed.
+
+Lesson: check upstream HEAD before filing. Follow-up: wire `VMUL`/`VRORVI` into
+go-asmgen so NEON-multiply and RVV-rotate kernels use the real instructions.
+
+---
+
 # Go toolchain prototypes — two missing vector instructions
 
 Verified prototypes adding two SIMD instructions to Go's assembler, found missing
