@@ -1,3 +1,19 @@
+Tracking issue: golang/go#79958 (FILED 2026-06-11; use "Updates #79958" on all
+three so the issue isn't auto-closed before all land).
+
+REBASE NEEDED (the .patch files were cut against Go ~2025-08-27 and have drifted
+against current master, e.g. HEAD f2f369db): plain `git apply` and `git apply
+--3way` both fail. Re-apply each change to the current tree, then regenerate
+anames and validate:
+  - arm64 VMUL: opcode enum in a.out.go (~L952 region), optab in asm7.go, then
+    `go generate ./src/cmd/internal/obj/arm64`.
+  - riscv VRORVI: cpu.go (~L1119 region) + asm + `go generate .../riscv`.
+  - loong64 VPICKVE2GRV: **the patch targets a.out.go but loong64 now uses
+    `cpu.go`** — re-target to cpu.go + `go generate .../loong64`.
+  Then `cd src && ./make.bash` and `go test cmd/asm/internal/asm` (the golden
+  encodings) before `git codereview mail`. Content (encodings) is unchanged and
+  llvm-mc-verified; only placement drifted.
+
 # Submitting these upstream
 
 `UPSTREAM-ISSUE.md` is the issue body. The three verified `.patch` files are the
