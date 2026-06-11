@@ -37,15 +37,15 @@ jobs:
         run: go version
 
       - name: Vet
-        run: go vet ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/...
+        run: go vet ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/...
 
       - name: Build
-        run: go build ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/...
+        run: go build ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/...
 
       - name: Test + 100% coverage gate
         shell: bash
         run: |
-          go test -race -coverprofile=cover.out ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/...
+          go test -race -coverprofile=cover.out ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/...
           go tool cover -func=cover.out | tee cover.txt
           # Org-wide hard rule: the library is held to 100% statement coverage.
           # Every branch must be reachable from a test or the dead code is
@@ -209,3 +209,69 @@ jobs:
         env:
           QEMU_CPU: la464
         run: GOARCH=loong64 go test -exec=qemu-loongarch64-static ./examples/simd/loong64/... ./examples/loop/loong64/...
+
+  # ppc64le (POWER, VSX/AltiVec) — little-endian. VSX is baseline on POWER8+,
+  # so the default qemu CPU suffices.
+  asm-ppc64le:
+    name: asm-ppc64le
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install qemu-user-static
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+
+      - name: Regenerate assembly and check it is committed
+        run: |
+          go generate ./examples/simd/ppc64/...
+          git diff --exit-code -- examples/simd/ppc64 || {
+            echo "::error::generated ppc64le assembly is stale; run go generate and commit"; exit 1; }
+
+      - name: Vet (asmdecl)
+        run: GOOS=linux GOARCH=ppc64le go vet ./examples/simd/ppc64/...
+
+      - name: Build (cmd/asm validates mnemonics, incl. VSX)
+        run: GOOS=linux GOARCH=ppc64le go build ./examples/simd/ppc64/...
+
+      - name: Test VSX SIMD (runtime under qemu-ppc64le)
+        run: GOARCH=ppc64le go test -exec=qemu-ppc64le-static ./examples/simd/ppc64/...
+
+  # s390x (IBM Z, vector facility) — the only big-endian target. Same recipe;
+  # QEMU_CPU=max enables the vector facility.
+  asm-s390x:
+    name: asm-s390x
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install qemu-user-static
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+
+      - name: Regenerate assembly and check it is committed
+        run: |
+          go generate ./examples/simd/s390x/...
+          git diff --exit-code -- examples/simd/s390x || {
+            echo "::error::generated s390x assembly is stale; run go generate and commit"; exit 1; }
+
+      - name: Vet (asmdecl)
+        run: GOOS=linux GOARCH=s390x go vet ./examples/simd/s390x/...
+
+      - name: Build (cmd/asm validates mnemonics, incl. vector facility)
+        run: GOOS=linux GOARCH=s390x go build ./examples/simd/s390x/...
+
+      - name: Test vector SIMD (runtime under qemu-s390x, big-endian)
+        env:
+          QEMU_CPU: max
+        run: GOARCH=s390x go test -exec=qemu-s390x-static ./examples/simd/s390x/...

@@ -1,7 +1,8 @@
 # go-asmgen
 
 Ergonomic generation of Go-compatible Plan 9 assembly for **every 64-bit Go
-target** — **amd64**, **arm64**, **riscv64**, and **loong64**. Encoding is
+target** — **amd64**, **arm64**, **riscv64**, **loong64**, **ppc64le**, and
+**s390x**. Encoding is
 delegated to the Go toolchain assembler (`cmd/asm`); go-asmgen computes the ABI0
 frame layout and emits well-formed Plan 9 instruction text.
 
@@ -10,8 +11,8 @@ exactly what makes extending it to new ISAs expensive. go-asmgen instead emits
 Plan 9 text and lets `cmd/asm` encode, so each architecture is just a thin
 move/register surface over a **shared** ABI0 layout model ([`abi`](abi)). avo
 remains the richer choice for amd64-specific work; go-asmgen's niche is **one
-uniform builder across all four targets** (and it is the only such tool for the
-non-amd64 ones). The architectures differ only in their move tables:
+uniform builder across all six targets** (and it is the only such tool for the
+non-amd64 ones — now including ppc64le's VSX and s390x's vector facility). The architectures differ only in their move tables:
 
 | 8-byte int | float32 | float64 | |
 |---|---|---|---|
@@ -19,16 +20,20 @@ non-amd64 ones). The architectures differ only in their move tables:
 | `MOVD` | `FMOVS` | `FMOVD` | arm64 |
 | `MOV` | `MOVF` | `MOVD` | riscv64 |
 | `MOVV` | `MOVF` | `MOVD` | loong64 |
+| `MOVD` | `FMOVS` | `FMOVD` | ppc64le |
+| `MOVD` | `FMOVS` | `FMOVD` | s390x (big-endian) |
 
 ## Status
 
-v0 — **amd64**, **arm64**, **riscv64**, **loong64**, **ABI0**. Correct for
+v0 — **amd64**, **arm64**, **riscv64**, **loong64**, **ppc64le**, **s390x**,
+**ABI0**. Correct for
 sequences of scalars in any combination: signed/unsigned integers of 1/2/4/8
 bytes, pointers, and 32/64-bit floats. Each builder selects the right move per
 type and the shared layout computes ABI0 offsets (result area word-aligned,
 sub-word loads sign/zero-extended). Every emitted offset and access width is
 cross-checked by `go vet` asmdecl and exercised by runtime tests — natively on
-amd64 and arm64, and under qemu-user for riscv64 and loong64.
+amd64 and arm64, and under qemu-user for riscv64, loong64, ppc64le, and s390x
+(s390x exercising the big-endian path).
 
 **Aggregates and arrays** are supported: struct, slice, and string parameters
 (fields addressed as `name_field+offset(FP)`, e.g. `s_base`/`s_len`/`s_cap`) and
