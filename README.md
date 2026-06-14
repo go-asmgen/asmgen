@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/go-asmgen/brand/main/social/go-asmgen.png" alt="go-asmgen/asmgen" width="720"></p>
+
 # go-asmgen
 
 Ergonomic generation of Go-compatible Plan 9 assembly for **every 64-bit Go
@@ -42,8 +44,9 @@ Every target has both examples — see [`examples`](examples).
 
 **SIMD** works through the `Raw` escape hatch over loaded pointers: go-asmgen lays
 out the ABI0 frame and the vector body is emitted directly. Runtime-tested
-packed-add on all four targets — **SSE2 + AVX2** (amd64), **NEON** (arm64),
-**RVV** (riscv64), **LSX + LASX** (loong64), up to 256-bit. See
+packed-add on all six targets — **SSE2 + AVX2** (amd64), **NEON** (arm64),
+**RVV** (riscv64), **LSX + LASX** (loong64), **VSX** (ppc64le), **vector facility**
+(s390x, big-endian), up to 256-bit. See
 [`examples/simd`](examples/simd).
 
 **Stack frames and TEXT flags**: `NewFuncFlags` emits any flags (`NOSPLIT`,
@@ -56,7 +59,8 @@ A typed vector-load helper (to drop the `Raw` boilerplate) and first-class vecto
 ## Use it as a library
 
 Three small packages: an architecture builder (`amd64` / `arm64` / `riscv64` /
-`loong64`), the ABI0 layout model (`abi`), and the Plan 9 file writer (`emit`).
+`loong64` / `ppc64` / `s390x`), the ABI0 layout model (`abi`), and the Plan 9 file
+writer (`emit`).
 
 ```sh
 go get github.com/go-asmgen/asmgen@v0.1.0
@@ -97,11 +101,11 @@ For struct/slice/string parameters, build the layout with
 
 ## Validate locally (Go toolchain required)
 
-The library packages (`abi`, `emit`, `amd64`, `arm64`, `riscv64`, `loong64`) are
-architecture-independent and held to 100% test coverage:
+The library packages (`abi`, `emit`, `amd64`, `arm64`, `riscv64`, `loong64`,
+`ppc64`, `s390x`) are architecture-independent and held to 100% test coverage:
 
 ```sh
-go test ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/...
+go test ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/...
 ```
 
 The generated assembly is the real test of correctness. On an arm64 host (Apple
@@ -113,7 +117,7 @@ GOARCH=arm64 go vet ./examples/add/... ./examples/types/...   # asmdecl
 go test ./examples/add/... ./examples/types/...               # runtime
 ```
 
-riscv64 and loong64 have no common native host, so validate them statically
+riscv64, loong64, ppc64le and s390x have no common native host, so validate them statically
 anywhere (asmdecl + `cmd/asm`) and run them under emulation (shown for riscv64;
 loong64 is identical with `GOARCH=loong64` / `qemu-loongarch64-static`):
 
@@ -133,7 +137,8 @@ GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/riscv64/...
 2. **`cmd/asm` accepts every instruction**, and the committed `.s` is regenerated
    and diffed — a stale or invalid `.s` fails the build.
 3. **Runtime test** — the function is actually called and its result checked:
-   natively on amd64 and arm64 runners, under qemu-user for riscv64 and loong64.
+   natively on amd64 and arm64 runners, under qemu-user for riscv64, loong64,
+   ppc64le and s390x.
 4. **100% library coverage** is gated on `abi`, `emit`, and the four builders.
 
 ## Roadmap
