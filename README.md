@@ -159,7 +159,7 @@ GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/riscv64/...
   loads and SSE float moves), runtime-proven natively, and **SIMD** examples
   (amd64 SSE + arm64 NEON packed add) through `Raw`. (done — here)
 - First-class vector *types* (pass `[4]float32` by value; RVV on riscv64,
-  LSX/LASX on loong64 — all four assemblers support SIMD), and array value args.
+  LSX/LASX on loong64 — all six assemblers support SIMD), and array value args.
 - Optional: derive instruction mnemonic tables from cmd/internal/obj to catch
   typos at generation time (still delegating encoding to cmd/asm).
 
