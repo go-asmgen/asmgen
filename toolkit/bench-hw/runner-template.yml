@@ -1,0 +1,44 @@
+# runner-template.yml — drop into a repo's .github/workflows/ to run its SIMD
+# benchmarks on REAL POWER/Z hardware via a self-hosted GitHub Actions runner.
+#
+# Prereq (one-time, per machine): register a self-hosted runner on a real box and
+# give it arch labels. Free OSS hosts (see ./README.md):
+#   * IBM LinuxONE Community Cloud  -> a permanent free s390x VM  -> labels: [self-hosted, linux, s390x]
+#   * OSU Open Source Lab POWER     -> a ppc64le instance         -> labels: [self-hosted, linux, ppc64le]
+# Register:  ./config.sh --url https://github.com/<org>/<repo> --token <TOKEN> \
+#              --labels self-hosted,linux,s390x   (or ppc64le)
+#   then:    ./run.sh   (or install as a service)
+#
+# This complements ci.yml (which proves CORRECTNESS under qemu). This workflow
+# adds real-hardware PERFORMANCE, turning the llvm-mca estimates into measured GB/s.
+name: bench-native-power-z
+on:
+  workflow_dispatch:        # run on demand
+  schedule:
+    - cron: '0 6 * * 1'     # weekly Monday 06:00 UTC (optional)
+
+jobs:
+  bench:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - [self-hosted, linux, ppc64le]
+          - [self-hosted, linux, s390x]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: stable }
+      - name: Benchmark (native ${{ runner.arch }})
+        run: |
+          go version
+          GOWORK=off go test -run '^$' -bench=. -benchmem -count=6 ./... \
+            | tee bench-$(go env GOARCH).txt
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ join(matrix.runner, '-') }}
+          path: bench-*.txt
+      # Optional: a step that rewrites the README's ppc64le/s390x perf row from
+      # the artifact and opens a PR — keep human-in-the-loop for honest framing.
