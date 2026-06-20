@@ -1,0 +1,50 @@
+name: bench-native
+# Real-hardware SIMD benchmarks on a SELF-HOSTED runner — for the arches GitHub
+# does not host and the GCC Compile Farm cannot provide:
+#   * s390x   -> register an IBM LinuxONE Community Cloud VM as a self-hosted
+#                runner with labels:  self-hosted, linux, s390x
+#   * loong64 -> a Debian LoongArch porter box / a github.com/loong64 image,
+#                labels:  self-hosted, linux, loong64
+#   * ppc64le -> an OSU OSL POWER instance (cfarm already covers ad-hoc), labels: ... ppc64le
+# Register:  ./config.sh --url https://github.com/go-asmgen/asmgen \
+#              --token <TOKEN> --labels self-hosted,linux,s390x
+#
+# Until a matching runner is online there is simply nothing to run on. This is
+# workflow_dispatch ONLY, so it creates no pending PR checks. It complements the
+# qemu correctness CI by adding measured native PERFORMANCE (never extrapolated).
+# See toolkit/bench-hw/README.md.
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: self-hosted runner arch label to target
+        default: s390x
+        type: choice
+        options: [s390x, ppc64le, loong64]
+      count:
+        description: "go test -count"
+        default: "6"
+      benchtime:
+        description: "go test -benchtime"
+        default: 300ms
+permissions:
+  contents: read
+jobs:
+  bench:
+    runs-on: [self-hosted, linux, "${{ inputs.arch }}"]
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - name: Run native SIMD benchmarks (${{ inputs.arch }})
+        run: |
+          go version
+          bash toolkit/bench-hw/bench-hw.sh "${{ inputs.count }}" "${{ inputs.benchtime }}" \
+            | tee "bench-$(go env GOARCH).md"
+      - name: Upload report
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench-${{ inputs.arch }}
+          path: bench-*.md
