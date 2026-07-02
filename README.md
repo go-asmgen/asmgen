@@ -2,6 +2,11 @@
 
 # go-asmgen
 
+[![Docs](https://img.shields.io/badge/docs-mkdocs--material-0079A8)](https://go-asmgen.github.io/docs/)
+[![License](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
+[![Go](https://img.shields.io/badge/go-1.22%2B-00ADD8)](https://go.dev/dl/)
+[![Status](https://img.shields.io/badge/status-6%20arches%20live-1a7f37)](#roadmap)
+
 Ergonomic generation of Go-compatible Plan 9 assembly for **every 64-bit Go
 target** — **amd64**, **arm64**, **riscv64**, **loong64**, **ppc64le**, and
 **s390x**. Encoding is
