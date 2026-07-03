@@ -37,15 +37,15 @@ jobs:
         run: go version
 
       - name: Vet
-        run: go vet ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/...
+        run: go vet ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/... ./wasm/...
 
       - name: Build
-        run: go build ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/...
+        run: go build ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/... ./wasm/...
 
       - name: Test + 100% coverage gate
         shell: bash
         run: |
-          go test -race -coverprofile=cover.out ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/...
+          go test -race -coverprofile=cover.out ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/... ./wasm/...
           go tool cover -func=cover.out | tee cover.txt
           # Org-wide hard rule: the library is held to 100% statement coverage.
           # Every branch must be reachable from a test or the dead code is
@@ -275,3 +275,45 @@ jobs:
         env:
           QEMU_CPU: max
         run: GOARCH=s390x go test -exec=qemu-s390x-static ./examples/simd/s390x/...
+
+  # wasm-e2e regenerates each shipped wasm kernel from the pinned generator
+  # (./examples/wasm/<kernel>) and drift-gates the committed .wat.golden
+  # against the fresh generator output, then compiles via wat2wasm and runs
+  # the wazero cross-check in examples/wasm/verify/ against a Go reference.
+  # This is the wasm analogue of the asm-<arch> jobs — one runner covers
+  # every kernel because wasm-SIMD is arch-agnostic.
+  wasm-e2e:
+    name: wasm-e2e
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: Install WABT (wat2wasm)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wabt
+
+      - name: Regenerate + compile + verify each kernel
+        run: |
+          set -eo pipefail
+          cd examples/wasm/verify
+          go mod download
+          cd ../../..
+          for k in matchlen hex hex_decode popcount toupper memchr isascii utf8len json_clean; do
+            echo "::group::$k"
+            go run ./examples/wasm/"$k" > "/tmp/$k.wat"
+            # Drift gate: freshly-generated .wat must match the golden.
+            diff -u "examples/wasm/$k/$k.wat.golden" "/tmp/$k.wat" || {
+              echo "::error::golden examples/wasm/$k/$k.wat.golden differs from generator output"
+              exit 1
+            }
+            wat2wasm "/tmp/$k.wat" -o "/tmp/$k.wasm"
+            (cd examples/wasm/verify && go run . "$k" "/tmp/$k.wasm")
+            echo "::endgroup::"
+          done
