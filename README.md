@@ -30,6 +30,23 @@ non-amd64 ones — now including ppc64le's VSX and s390x's vector facility). The
 | `MOVD` | `FMOVS` | `FMOVD` | ppc64le |
 | `MOVD` | `FMOVS` | `FMOVD` | s390x (big-endian) |
 
+## Companion: wasm-SIMD (v128)
+
+Go's compiler does not emit `v128` from Go source, and Plan 9 assembly has
+no wasm dialect — so wasm-SIMD kernels have to be external, imported via
+`//go:wasmimport`. The [`go-asmgen/wasm`](https://github.com/go-asmgen/wasm)
+sibling module ports the same layering pattern to a seventh target: a
+programmatic WAT text emitter that `wat2wasm` compiles into `.wasm`,
+byte-equivalent to a hand-authored kernel and drift-gated against the
+generator in consumer CI.
+
+Nine kernels ship today (matchlen, hex, hex_decode, popcount, toupper,
+memchr, isascii, utf8len, json_clean), each with a golden-file test and a
+wazero cross-check against a Go stdlib reference. See the
+[wasm docs section](https://go-asmgen.github.io/docs/latest/wasm/) for
+the emitter surface, kernel signatures, and the drift + regression CI
+pattern used by consumers.
+
 ## Status
 
 v0 — **amd64**, **arm64**, **riscv64**, **loong64**, **ppc64le**, **s390x**,
