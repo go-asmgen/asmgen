@@ -50,10 +50,10 @@ the emitter surface, kernel signatures, and the drift + regression CI
 pattern used by consumers.
 
 The wasm package was previously shipped as a standalone
-[`go-asmgen/wasm`](https://github.com/go-asmgen/wasm) module (tags
-v0.1.0 – v0.3.0, still valid). Folded here as of this commit — new
-consumers should pin `github.com/go-asmgen/asmgen/wasm/…`; existing
-consumers pinning the standalone module continue to work unchanged.
+`go-asmgen/wasm` module (tags v0.1.0 – v0.3.0) — that repo has since
+been retired in favor of this fold. Pin
+`github.com/go-asmgen/asmgen/wasm/…` and
+`github.com/go-asmgen/asmgen/examples/wasm/<kernel>`.
 
 ## Status
 
