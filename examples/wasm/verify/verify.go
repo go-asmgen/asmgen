@@ -39,7 +39,7 @@ var envWasm = []byte{
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Fprintln(os.Stderr, "usage: verify <kernel> <wasm-path>")
-		fmt.Fprintln(os.Stderr, "  kernel: matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32 | base64_encode")
+		fmt.Fprintln(os.Stderr, "  kernel: matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32 | base64_encode | indexany4")
 		os.Exit(2)
 	}
 	kernel := os.Args[1]
@@ -89,8 +89,10 @@ func main() {
 		runErr = verifyAdler32(ctx, kern, mem)
 	case "base64_encode":
 		runErr = verifyBase64Encode(ctx, kern, mem)
+	case "indexany4":
+		runErr = verifyIndexAny4(ctx, kern, mem)
 	default:
-		die("unknown kernel %q (want matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32 | base64_encode)", kernel)
+		die("unknown kernel %q (want matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32 | base64_encode | indexany4)", kernel)
 	}
 	if runErr != nil {
 		fmt.Fprintln(os.Stderr, runErr)
@@ -855,6 +857,104 @@ func verifyBase64Encode(ctx context.Context, kern api.Module, mem api.Memory) er
 	}
 	fmt.Println("\nAll base64_encode cases passed.")
 	return nil
+}
+
+// -----------------------------------------------------------------------------
+// indexany4
+// -----------------------------------------------------------------------------
+
+// verifyIndexAny4 runs the indexany4 kernel and cross-checks against
+// bytes.IndexAny on inputs where the needle set has ≤ 4 distinct chars
+// (the kernel takes exactly 4 needle bytes; the harness duplicates
+// entries when fewer are wanted, matching how a real caller would).
+func verifyIndexAny4(ctx context.Context, kern api.Module, mem api.Memory) error {
+	fn := kern.ExportedFunction("indexany4")
+	if fn == nil {
+		return fmt.Errorf("kernel does not export indexany4")
+	}
+	type c struct {
+		buf     []byte
+		needles [4]byte // caller duplicates when fewer than 4 wanted
+		want    int
+	}
+	cases := []c{
+		// 16 bytes, first match at lane 0
+		{[]byte("Xaaaaaaaaaaaaaaa"), [4]byte{'X', 'X', 'X', 'X'}, 0},
+		// 16 bytes, first match at last lane
+		{[]byte("aaaaaaaaaaaaaaaY"), [4]byte{'Y', 'Y', 'Y', 'Y'}, 15},
+		// 16 bytes, ANY of 4 distinct needles matches; first hit at 5
+		{[]byte("abcdeXghijklmnop"), [4]byte{'X', 'Y', 'Z', 'W'}, 5},
+		// 16 bytes, first match is n3 (letter picks middle needle)
+		{[]byte("abcdefghQjklmnop"), [4]byte{'X', 'Y', 'Q', 'W'}, 8},
+		// 16 bytes, no match
+		{[]byte("aaaaaaaaaaaaaaaa"), [4]byte{'X', 'Y', 'Z', 'W'}, -1},
+		// 32 bytes, match in second block via n4
+		{append([]byte("aaaaaaaaaaaaaaaa"), []byte("aaaaaaaKaaaaaaaa")...), [4]byte{'X', 'Y', 'Z', 'K'}, 23},
+		// 64 bytes, match at lane 41 via any of 4 (comma)
+		{withByte(bytes.Repeat([]byte{'.'}, 64), 41, ','), [4]byte{',', ' ', '\t', '\n'}, 41},
+		// 64 bytes, no match
+		{bytes.Repeat([]byte{'.'}, 64), [4]byte{',', ' ', '\t', '\n'}, -1},
+		// Whitespace-set search on a real-ish string (32 bytes)
+		{[]byte("hello world\tfoo\nbar quux xxxxxx"), [4]byte{' ', '\t', '\n', '\r'}, 5},
+		// Zero-byte needle
+		{[]byte{'a', 'b', 'c', 'd', 'e', 0x00, 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p'}, [4]byte{0x00, 0x00, 0x00, 0x00}, 5},
+	}
+	fail := 0
+	for i, tc := range cases {
+		nBlocks := uint32(len(tc.buf) / 16)
+		if nBlocks == 0 {
+			fmt.Printf("[%d] SKIP  input < 16 bytes\n", i)
+			continue
+		}
+		srcOff := uint32(0)
+		mem.Write(srcOff, make([]byte, int(nBlocks)*16+32))
+		if ok := mem.Write(srcOff, tc.buf); !ok {
+			return fmt.Errorf("write src")
+		}
+		results, err := fn.Call(ctx, uint64(srcOff), uint64(nBlocks),
+			uint64(tc.needles[0]), uint64(tc.needles[1]),
+			uint64(tc.needles[2]), uint64(tc.needles[3]))
+		if err != nil {
+			fmt.Printf("[%d] ERR   %v\n", i, err)
+			fail++
+			continue
+		}
+		got := int(int32(results[0]))
+		// Cross-check the "want" against Go's bytes.IndexAny on the
+		// (deduplicated) needle set.
+		set := string(dedupBytes(tc.needles[:]))
+		refWant := bytes.IndexAny(tc.buf[:nBlocks*16], set)
+		if refWant != tc.want {
+			return fmt.Errorf("case %d: hand-written want=%d disagrees with bytes.IndexAny=%d",
+				i, tc.want, refWant)
+		}
+		status := "OK  "
+		if got != tc.want {
+			status = "FAIL"
+			fail++
+		}
+		fmt.Printf("[%d] %s  n=%d  got=%d want=%d\n", i, status, len(tc.buf), got, tc.want)
+	}
+	if fail > 0 {
+		return fmt.Errorf("%d indexany4 case(s) failed", fail)
+	}
+	fmt.Println("\nAll indexany4 cases passed.")
+	return nil
+}
+
+// dedupBytes returns a slice with duplicate bytes removed (order preserved
+// by first appearance) — used to convert the 4-needle array into a
+// deduplicated set string for bytes.IndexAny cross-checking.
+func dedupBytes(in []byte) []byte {
+	seen := make(map[byte]bool, len(in))
+	out := make([]byte, 0, len(in))
+	for _, b := range in {
+		if !seen[b] {
+			seen[b] = true
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 // -----------------------------------------------------------------------------
