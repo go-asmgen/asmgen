@@ -108,6 +108,11 @@ func (f *Function) V128Store64Lane(offset, lane int) {
 	f.Raw("(v128.store64_lane offset=%d %d)", offset, lane)
 }
 
+// I32Store pops (v:i32) and (addr:i32); writes v to memory at addr+offset.
+// Used when a kernel returns multiple i32 values via caller-provided output
+// pointers (adler32 writes back the running (a, b) pair this way).
+func (f *Function) I32Store(offset int) { f.Raw("(i32.store offset=%d)", offset) }
+
 // V128Const16 pushes a v128 constant built from 16 immediate bytes. Uses the
 // (v128.const i8x16 ...) shape so byte-lane-oriented constants (nibble LUTs,
 // masks) read naturally.
@@ -220,6 +225,14 @@ func (f *Function) I16x8ExtaddPairwiseI8x16U() { f.Raw("(i16x8.extadd_pairwise_i
 // I32x4ExtaddPairwiseI16x8U pairs u16 lanes into u32 lanes (analogous op for
 // the next stage of a horizontal reduction).
 func (f *Function) I32x4ExtaddPairwiseI16x8U() { f.Raw("(i32x4.extadd_pairwise_i16x8_u)") }
+
+// I16x8ExtmulLowI8x16U / I16x8ExtmulHighI8x16U pop two v128 (interpreted as
+// 16 u8 lanes each), widen the low / high 8 lanes to u16, multiply pairwise,
+// and push a v128 of 8 u16 products. These are the wasm-SIMD alternative to
+// PMULLW+PMULHW that adler32 uses for the weighted-byte-sum step (max
+// product 255*16=4080 fits in u16 so no overflow to worry about).
+func (f *Function) I16x8ExtmulLowI8x16U()  { f.Raw("(i16x8.extmul_low_i8x16_u)") }
+func (f *Function) I16x8ExtmulHighI8x16U() { f.Raw("(i16x8.extmul_high_i8x16_u)") }
 
 // I32x4Add pops two v128 (interpreted as 4 i32 lanes) and pushes their
 // per-lane sum. Used to accumulate widened popcount results across blocks.

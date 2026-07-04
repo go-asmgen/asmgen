@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"hash/adler32"
 	"math/bits"
 	"os"
 	"strings"
@@ -37,7 +38,7 @@ var envWasm = []byte{
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Fprintln(os.Stderr, "usage: verify <kernel> <wasm-path>")
-		fmt.Fprintln(os.Stderr, "  kernel: matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean")
+		fmt.Fprintln(os.Stderr, "  kernel: matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32")
 		os.Exit(2)
 	}
 	kernel := os.Args[1]
@@ -83,8 +84,10 @@ func main() {
 		runErr = verifyHexDecode(ctx, kern, mem)
 	case "json_clean":
 		runErr = verifyJsonClean(ctx, kern, mem)
+	case "adler32":
+		runErr = verifyAdler32(ctx, kern, mem)
 	default:
-		die("unknown kernel %q (want matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean)", kernel)
+		die("unknown kernel %q (want matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32)", kernel)
 	}
 	if runErr != nil {
 		fmt.Fprintln(os.Stderr, runErr)
@@ -690,6 +693,95 @@ func verifyJsonClean(ctx context.Context, kern api.Module, mem api.Memory) error
 	}
 	fmt.Println("\nAll json_clean cases passed.")
 	return nil
+}
+
+// -----------------------------------------------------------------------------
+// adler32
+// -----------------------------------------------------------------------------
+
+// verifyAdler32 runs the adler32 kernel and cross-checks against
+// hash/adler32. The kernel processes nBlocks × 16 bytes without doing
+// the mod-65521 reduction, so the harness runs the kernel then applies
+// the modulo to compare against the Go stdlib's checksum. Test inputs
+// are all multiples of 16 bytes, capped at 5552 (NMAX) so intermediate
+// a and b stay in u32 range.
+func verifyAdler32(ctx context.Context, kern api.Module, mem api.Memory) error {
+	fn := kern.ExportedFunction("adler32")
+	if fn == nil {
+		return fmt.Errorf("kernel does not export adler32")
+	}
+	cases := [][]byte{
+		make([]byte, 16),   // 16 zero bytes
+		bytes16(0xff),      // 16 x 0xff
+		bytesRange(16),     // 16 bytes 0..15
+		bytesN(32, 0x5a),   // 32 x 0x5a
+		bytesRange(64),     // 64 bytes 0..63
+		bytesN(1024, 0xa5), // 1024 x 0xa5
+		bytesRange(240),    // 240 bytes 0..239 (255 max)
+		// Larger but under NMAX (5552 bytes = 347 blocks × 16).
+		mixedPattern(4096),
+	}
+	fail := 0
+	for i, in := range cases {
+		nBlocks := uint32(len(in) / 16)
+		if nBlocks == 0 {
+			fmt.Printf("[%d] SKIP  input < 16 bytes\n", i)
+			continue
+		}
+		srcOff := uint32(0)
+		aOutOff := uint32(0x10000)
+		bOutOff := uint32(0x10004)
+		mem.Write(srcOff, in)
+
+		if _, err := fn.Call(ctx,
+			uint64(srcOff), uint64(nBlocks),
+			uint64(1), uint64(0),
+			uint64(aOutOff), uint64(bOutOff)); err != nil {
+			fmt.Printf("[%d] ERR   %v\n", i, err)
+			fail++
+			continue
+		}
+
+		aRaw, ok := mem.ReadUint32Le(aOutOff)
+		if !ok {
+			return fmt.Errorf("read a")
+		}
+		bRaw, ok := mem.ReadUint32Le(bOutOff)
+		if !ok {
+			return fmt.Errorf("read b")
+		}
+		gotAdler := ((bRaw % 65521) << 16) | (aRaw % 65521)
+		// Reference: hash/adler32 over the same nBlocks × 16 bytes.
+		h := goAdler32Checksum(in[:nBlocks*16])
+		status := "OK  "
+		if gotAdler != h {
+			status = "FAIL"
+			fail++
+		}
+		fmt.Printf("[%d] %s  n=%d  got=%08x want=%08x\n", i, status, len(in), gotAdler, h)
+	}
+	if fail > 0 {
+		return fmt.Errorf("%d adler32 case(s) failed", fail)
+	}
+	fmt.Println("\nAll adler32 cases passed.")
+	return nil
+}
+
+// goAdler32Checksum wraps hash/adler32 so we can pull it in only in the
+// verifier (keeps the kernel package dependency-free).
+func goAdler32Checksum(b []byte) uint32 {
+	return adler32.Checksum(b)
+}
+
+// mixedPattern generates a deterministic non-uniform byte pattern of the
+// given length (multiple of 16) — meant to catch alignment / lane-order
+// bugs the constant-byte inputs would miss.
+func mixedPattern(n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = byte(i*31 ^ (i >> 3))
+	}
+	return b
 }
 
 // -----------------------------------------------------------------------------

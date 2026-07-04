@@ -108,6 +108,10 @@ func TestStackOpsShape(t *testing.T) {
 	fn.I8x16Shl()
 	fn.V128Store64Lane(0, 0)
 	fn.V128Store64Lane(16, 1)
+	fn.I32Store(0)
+	fn.I32Store(4)
+	fn.I16x8ExtmulLowI8x16U()
+	fn.I16x8ExtmulHighI8x16U()
 	fn.Return()
 
 	body := fn.String()
@@ -148,6 +152,10 @@ func TestStackOpsShape(t *testing.T) {
 		"(i8x16.shl)",
 		"(v128.store64_lane offset=0 0)",
 		"(v128.store64_lane offset=16 1)",
+		"(i32.store offset=0)",
+		"(i32.store offset=4)",
+		"(i16x8.extmul_low_i8x16_u)",
+		"(i16x8.extmul_high_i8x16_u)",
 		"(return)",
 	}
 	for _, w := range wants {
