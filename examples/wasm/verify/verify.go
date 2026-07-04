@@ -39,7 +39,7 @@ var envWasm = []byte{
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Fprintln(os.Stderr, "usage: verify <kernel> <wasm-path>")
-		fmt.Fprintln(os.Stderr, "  kernel: matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32 | base64_encode | indexany4")
+		fmt.Fprintln(os.Stderr, "  kernel: matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32 | base64_encode | indexany4 | base64_decode")
 		os.Exit(2)
 	}
 	kernel := os.Args[1]
@@ -91,8 +91,10 @@ func main() {
 		runErr = verifyBase64Encode(ctx, kern, mem)
 	case "indexany4":
 		runErr = verifyIndexAny4(ctx, kern, mem)
+	case "base64_decode":
+		runErr = verifyBase64Decode(ctx, kern, mem)
 	default:
-		die("unknown kernel %q (want matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32 | base64_encode | indexany4)", kernel)
+		die("unknown kernel %q (want matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32 | base64_encode | indexany4 | base64_decode)", kernel)
 	}
 	if runErr != nil {
 		fmt.Fprintln(os.Stderr, runErr)
@@ -955,6 +957,90 @@ func dedupBytes(in []byte) []byte {
 		}
 	}
 	return out
+}
+
+// -----------------------------------------------------------------------------
+// base64_decode
+// -----------------------------------------------------------------------------
+
+// verifyBase64Decode runs the base64_decode kernel and cross-checks
+// against encoding/base64.StdEncoding.DecodeString on inputs whose
+// char-length is a multiple of 16 (nBlocks × 16 → nBlocks × 12 bytes).
+func verifyBase64Decode(ctx context.Context, kern api.Module, mem api.Memory) error {
+	fn := kern.ExportedFunction("base64_decode")
+	if fn == nil {
+		return fmt.Errorf("kernel does not export base64_decode")
+	}
+	// Build each case by base64-encoding a known byte input, so the
+	// verifier round-trips through the reference encoder to produce
+	// input the reference decoder then reverses.
+	inputs := [][]byte{
+		bytes.Repeat([]byte{0x00}, 12),  // 12 zero bytes  → 16 'A's
+		bytes.Repeat([]byte{0xff}, 12),  // 12 x 0xff       → 16 '/'s
+		[]byte("Hello, worl!"),          // 12 bytes ASCII
+		bytesRange(12),                  // 0..11
+		bytesRange(24),                  // 0..23 (2 blocks)
+		bytesRange(48),                  // 0..47 (4 blocks)
+		mixedPattern(120),               // 10 blocks
+		mixedPattern(1200),              // 100 blocks
+		bytes.Repeat([]byte{0x3f, 0xff, 0x00}, 4), // triggers '+' and '/'
+	}
+	fail := 0
+	for i, in := range inputs {
+		encoded := base64.StdEncoding.EncodeToString(in)
+		nBlocks := uint32(len(encoded) / 16)
+		if nBlocks == 0 {
+			fmt.Printf("[%d] SKIP  encoded < 16 chars\n", i)
+			continue
+		}
+		srcOff := uint32(0)
+		dstOff := uint32(0x10000)
+		mem.Write(srcOff, []byte(encoded))
+		// Zero output region so a garbage-writing kernel is visible.
+		// Reserve nBlocks*12 + 16 bytes so the last block's junk-byte
+		// store (positions 12-15 within the last v128.store) lands
+		// in-bounds.
+		mem.Write(dstOff, make([]byte, int(nBlocks)*12+32))
+
+		if _, err := fn.Call(ctx,
+			uint64(dstOff), uint64(srcOff), uint64(nBlocks)); err != nil {
+			fmt.Printf("[%d] ERR   %v\n", i, err)
+			fail++
+			continue
+		}
+
+		gotBytes, ok := mem.Read(dstOff, nBlocks*12)
+		if !ok {
+			return fmt.Errorf("read dst")
+		}
+		want := in[:nBlocks*12]
+		status := "OK  "
+		if !bytes.Equal(gotBytes, want) {
+			status = "FAIL"
+			fail++
+		}
+		fmt.Printf("[%d] %s  chars=%d bytes=%d  got=%x  want=%x\n",
+			i, status, len(encoded[:nBlocks*16]), len(want),
+			snipBytes(gotBytes), snipBytes(want))
+	}
+	if fail > 0 {
+		return fmt.Errorf("%d base64_decode case(s) failed", fail)
+	}
+	fmt.Println("\nAll base64_decode cases passed.")
+	return nil
+}
+
+// snipBytes returns a short hex representation of a byte slice, truncated
+// with "…" when longer than 24 bytes, so the verifier output stays
+// readable on wide inputs.
+func snipBytes(b []byte) []byte {
+	if len(b) > 24 {
+		short := make([]byte, 0, 25)
+		short = append(short, b[:24]...)
+		short = append(short, '.')
+		return short
+	}
+	return b
 }
 
 // -----------------------------------------------------------------------------

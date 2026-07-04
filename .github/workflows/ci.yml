@@ -305,7 +305,7 @@ jobs:
           cd examples/wasm/verify
           go mod download
           cd ../../..
-          for k in matchlen hex hex_decode popcount toupper memchr isascii utf8len json_clean adler32 base64_encode indexany4; do
+          for k in matchlen hex hex_decode popcount toupper memchr isascii utf8len json_clean adler32 base64_encode indexany4 base64_decode; do
             echo "::group::$k"
             go run ./examples/wasm/"$k" > "/tmp/$k.wat"
             # Drift gate: freshly-generated .wat must match the golden.
