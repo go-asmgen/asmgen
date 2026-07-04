@@ -234,6 +234,47 @@ func (f *Function) I32x4ExtaddPairwiseI16x8U() { f.Raw("(i32x4.extadd_pairwise_i
 func (f *Function) I16x8ExtmulLowI8x16U()  { f.Raw("(i16x8.extmul_low_i8x16_u)") }
 func (f *Function) I16x8ExtmulHighI8x16U() { f.Raw("(i16x8.extmul_high_i8x16_u)") }
 
+// I16x8Mul pops two v128 (as 8 i16 lanes each) and pushes their per-lane
+// product truncated to i16 — the wasm-SIMD equivalent of PMULLW. Used by
+// base64 encode's Lemire-style 6-bit-index extraction, where each i16
+// lane multiplies against a constant that shifts the useful bits into
+// place in the low 16 bits of the product.
+func (f *Function) I16x8Mul() { f.Raw("(i16x8.mul)") }
+
+// I32x4ExtmulLowI16x8U / I32x4ExtmulHighI16x8U pop two v128 (as 8 u16
+// lanes each), widen the low / high 4 lanes to u32, multiply pairwise,
+// and push a v128 of 4 u32 products. Combined with I32x4ShrU and
+// I16x8NarrowI32x4U these emulate PMULHUW (unsigned high-word multiply)
+// — take the widening product, shift right 16, narrow back to i16x8 —
+// which is the "extract the top 6 bits into position" primitive Lemire's
+// base64 encoder needs.
+func (f *Function) I32x4ExtmulLowI16x8U()  { f.Raw("(i32x4.extmul_low_i16x8_u)") }
+func (f *Function) I32x4ExtmulHighI16x8U() { f.Raw("(i32x4.extmul_high_i16x8_u)") }
+
+// I32x4ShrU pops (v:v128) and (shift:i32); pushes per-i32-lane unsigned
+// right shift. Used in the PMULHUW emulation (shift right 16 to keep
+// only the high word of the widened product).
+func (f *Function) I32x4ShrU() { f.Raw("(i32x4.shr_u)") }
+
+// I16x8NarrowI32x4U pops two v128 (as 4 i32 lanes each) and packs their
+// low 16 bits into a single 8-lane i16x8 via unsigned saturation. Used
+// to close the PMULHUW emulation: after shifting u32 products right 16,
+// we narrow the two halves back into a single i16x8.
+func (f *Function) I16x8NarrowI32x4U() { f.Raw("(i16x8.narrow_i32x4_u)") }
+
+// I8x16GtU / I8x16LtU pop two v128 and push a per-byte unsigned-compare
+// mask (all-ones where a > b or a < b respectively). Used for range
+// checks on bytes with the high bit set (which the signed compares in
+// json_clean's docstring warn about).
+func (f *Function) I8x16GtU() { f.Raw("(i8x16.gt_u)") }
+func (f *Function) I8x16LtU() { f.Raw("(i8x16.lt_u)") }
+
+// I8x16Add pops two v128 (as 16 i8 lanes each) and pushes their per-lane
+// sum (with modular wraparound). Base64 encode's range-add offset step
+// uses this: start with (index + 65), then add per-range corrections
+// masked by the range predicates.
+func (f *Function) I8x16Add() { f.Raw("(i8x16.add)") }
+
 // I32x4Add pops two v128 (interpreted as 4 i32 lanes) and pushes their
 // per-lane sum. Used to accumulate widened popcount results across blocks.
 func (f *Function) I32x4Add() { f.Raw("(i32x4.add)") }

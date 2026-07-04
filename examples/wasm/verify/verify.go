@@ -15,6 +15,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"hash/adler32"
@@ -38,7 +39,7 @@ var envWasm = []byte{
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Fprintln(os.Stderr, "usage: verify <kernel> <wasm-path>")
-		fmt.Fprintln(os.Stderr, "  kernel: matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32")
+		fmt.Fprintln(os.Stderr, "  kernel: matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32 | base64_encode")
 		os.Exit(2)
 	}
 	kernel := os.Args[1]
@@ -86,8 +87,10 @@ func main() {
 		runErr = verifyJsonClean(ctx, kern, mem)
 	case "adler32":
 		runErr = verifyAdler32(ctx, kern, mem)
+	case "base64_encode":
+		runErr = verifyBase64Encode(ctx, kern, mem)
 	default:
-		die("unknown kernel %q (want matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32)", kernel)
+		die("unknown kernel %q (want matchlen | hex | hex_decode | popcount | toupper | memchr | isascii | utf8len | json_clean | adler32 | base64_encode)", kernel)
 	}
 	if runErr != nil {
 		fmt.Fprintln(os.Stderr, runErr)
@@ -782,6 +785,76 @@ func mixedPattern(n int) []byte {
 		b[i] = byte(i*31 ^ (i >> 3))
 	}
 	return b
+}
+
+// -----------------------------------------------------------------------------
+// base64_encode
+// -----------------------------------------------------------------------------
+
+// verifyBase64Encode runs the base64_encode kernel and cross-checks
+// against encoding/base64.StdEncoding on inputs whose length is a
+// multiple of 12 bytes (nBlocks × 12 → nBlocks × 16 output chars).
+func verifyBase64Encode(ctx context.Context, kern api.Module, mem api.Memory) error {
+	fn := kern.ExportedFunction("base64_encode")
+	if fn == nil {
+		return fmt.Errorf("kernel does not export base64_encode")
+	}
+	cases := [][]byte{
+		bytes.Repeat([]byte{0x00}, 12), // 12 zero bytes
+		bytes.Repeat([]byte{0xff}, 12), // 12 x 0xff (exercises '+' and '/')
+		[]byte("Hello, world!"),        // 13 → truncate to 12
+		bytesRange(12),                 // 0..11
+		bytesRange(24),                 // 0..23 (2 blocks)
+		bytesRange(48),                 // 0..47 (4 blocks)
+		mixedPattern(120),              // 10 blocks
+		mixedPattern(1200),             // 100 blocks
+		// All-'?' pattern hits high-nibble transitions (0x3f).
+		bytes.Repeat([]byte{0x3f, 0xff, 0x00}, 4),
+	}
+	fail := 0
+	for i, in := range cases {
+		nBlocks := uint32(len(in) / 12)
+		if nBlocks == 0 {
+			fmt.Printf("[%d] SKIP  input < 12 bytes\n", i)
+			continue
+		}
+		srcOff := uint32(0)
+		dstOff := uint32(0x10000)
+		// Zero the input region + 16 bytes of tail padding (kernel
+		// overreads 4 past the last block; extra 12 keeps the reference
+		// slice length matching what we'll compare against).
+		clean := make([]byte, int(nBlocks)*12+32)
+		copy(clean, in[:nBlocks*12])
+		mem.Write(srcOff, clean)
+		// Zero the output region so a garbage-writing kernel is visible.
+		mem.Write(dstOff, make([]byte, int(nBlocks)*16+16))
+
+		if _, err := fn.Call(ctx,
+			uint64(dstOff), uint64(srcOff), uint64(nBlocks)); err != nil {
+			fmt.Printf("[%d] ERR   %v\n", i, err)
+			fail++
+			continue
+		}
+
+		gotBytes, ok := mem.Read(dstOff, nBlocks*16)
+		if !ok {
+			return fmt.Errorf("read dst")
+		}
+		got := string(gotBytes)
+		want := base64.StdEncoding.EncodeToString(in[:nBlocks*12])
+		status := "OK  "
+		if got != want {
+			status = "FAIL"
+			fail++
+		}
+		fmt.Printf("[%d] %s  n=%d  got=%s  want=%s\n",
+			i, status, len(in[:nBlocks*12]), snip(got), snip(want))
+	}
+	if fail > 0 {
+		return fmt.Errorf("%d base64_encode case(s) failed", fail)
+	}
+	fmt.Println("\nAll base64_encode cases passed.")
+	return nil
 }
 
 // -----------------------------------------------------------------------------

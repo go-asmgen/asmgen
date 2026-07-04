@@ -39,12 +39,13 @@ pattern to a seventh target: a programmatic WAT text emitter that
 `wat2wasm` compiles into `.wasm`, byte-equivalent to a hand-authored
 kernel and drift-gated against the generator in consumer CI.
 
-Ten kernels ship in [`examples/wasm/`](examples/wasm) (matchlen, hex,
+Eleven kernels ship in [`examples/wasm/`](examples/wasm) (matchlen, hex,
 hex_decode, popcount, toupper, memchr, isascii, utf8len, json_clean,
-adler32), each with a golden-file test and a wazero cross-check against
-a Go stdlib reference. The CI `wasm-e2e` job regenerates every kernel,
-drift-gates against the committed golden, compiles via `wat2wasm`, and
-runs the wazero verifier on all ten. See the
+adler32, base64_encode), each with a golden-file test and a wazero
+cross-check against a Go stdlib reference. The CI `wasm-e2e` job
+regenerates every kernel, drift-gates against the committed golden,
+compiles via `wat2wasm`, and runs the wazero verifier on all eleven.
+See the
 [wasm docs section](https://go-asmgen.github.io/docs/latest/wasm/) for
 the emitter surface, kernel signatures, and the drift + regression CI
 pattern used by consumers.
