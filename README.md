@@ -71,7 +71,11 @@ amd64 and arm64, and under qemu-user for riscv64, loong64, ppc64le, and s390x
 **Aggregates and arrays** are supported: struct, slice, and string parameters
 (fields addressed as `name_field+offset(FP)`, e.g. `s_base`/`s_len`/`s_cap`) and
 fixed-size `[n]T` arrays passed by value (element-wise, `name_0…name_(n-1)`).
-Every target has both examples — see [`examples`](examples).
+The layout math is architecture-independent and proven generically in `abi`'s
+own tests; **amd64, arm64, riscv64, and loong64** additionally have dedicated,
+runtime-tested example programs for both — see [`examples`](examples). ppc64le
+and s390x don't have dedicated aggregate/array examples yet (SIMD examples
+exist for all six — see below).
 
 **SIMD** works through the `Raw` escape hatch over loaded pointers: go-asmgen lays
 out the ABI0 frame and the vector body is emitted directly. Runtime-tested
@@ -94,7 +98,7 @@ Three small packages: an architecture builder (`amd64` / `arm64` / `riscv64` /
 writer (`emit`).
 
 ```sh
-go get github.com/go-asmgen/asmgen@v0.1.0
+go get github.com/go-asmgen/asmgen@latest
 ```
 
 ```go
@@ -170,7 +174,7 @@ GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/riscv64/...
 3. **Runtime test** — the function is actually called and its result checked:
    natively on amd64 and arm64 runners, under qemu-user for riscv64, loong64,
    ppc64le and s390x.
-4. **100% library coverage** is gated on `abi`, `emit`, and the four builders.
+4. **100% library coverage** is gated on `abi`, `emit`, and the six builders.
 
 ## Roadmap
 
