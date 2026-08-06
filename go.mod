@@ -1,3 +1,3 @@
 module github.com/go-asmgen/asmgen
 
-go 1.22
+go 1.26.4
