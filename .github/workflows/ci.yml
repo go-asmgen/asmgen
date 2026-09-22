@@ -317,3 +317,18 @@ jobs:
             (cd examples/wasm/verify && go run . "$k" "/tmp/$k.wasm")
             echo "::endgroup::"
           done
+
+      # The loop above runs each generator's HAPPY PATH: emit, compile, check
+      # the result against a Go reference. These packages also have Go tests,
+      # and those reach what the loop cannot --
+      #
+      #     TestRunMatchesGolden      the same drift gate, from inside
+      #     TestRunErrorPropagates    a writer that fails mid-emit
+      #     TestMainErrorPath         a bad argument, a non-zero exit
+      #
+      # -- the error paths, which `go run` on a working input never takes.
+      # Thirteen packages' worth of them had never run anywhere: every other
+      # example tree is named on its asm-<arch> job's `go test` line, and
+      # examples/wasm was the one left out of that pattern.
+      - name: go test the wasm example packages
+        run: go test ./examples/wasm/...
