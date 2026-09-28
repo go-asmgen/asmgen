@@ -88,6 +88,13 @@ packed-add on all six targets — **SSE2 + AVX2** (amd64), **NEON** (arm64),
 `NOSPLIT|NOFRAME`, or none for the stack-growth preamble); `frameSize > 0`
 reserves locals addressed `name-N(SP)`. See [`examples/frame`](examples/frame).
 
+**CPU feature probes**: `amd64.FeatureProbe(name, amd64.AVX2)` emits the
+CPUID/XGETBV gate a dispatched kernel needs in front of it, as a `func() bool`,
+so a package that wants no runtime dependency does not have to hand-write CPUID
+to get one. The OS half is the part hand-rolled probes drop: a CPU can report
+AVX2 on a kernel that does not save YMM state. `POPCNT` is there too, and the
+list stops at what has callers.
+
 A typed vector-load helper (to drop the `Raw` boilerplate) and first-class vector
 *types* are the main remaining items.
 

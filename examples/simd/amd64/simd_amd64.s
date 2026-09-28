@@ -24,3 +24,28 @@ TEXT ·addI32x8(SB), NOSPLIT, $0-24
 	VMOVDQU Y2, (CX)
 	RET
 
+TEXT ·hasAVX2(SB), NOSPLIT, $0-1
+	MOVB $0, ret+0(FP)
+	XORL AX, AX
+	CPUID
+	CMPL AX, $7
+	JL hasAVX2_unsupported
+	MOVL $1, AX
+	CPUID
+	ANDL $0x18000000, CX // AVX and OSXSAVE
+	CMPL CX, $0x18000000
+	JNE hasAVX2_unsupported
+	XORL CX, CX
+	XGETBV
+	ANDL $6, AX // XMM and YMM state enabled in XCR0
+	CMPL AX, $6
+	JNE hasAVX2_unsupported
+	MOVL $7, AX
+	XORL CX, CX
+	CPUID
+	TESTL $0x20, BX // AVX2
+	JZ hasAVX2_unsupported
+	MOVB $1, ret+0(FP)
+hasAVX2_unsupported:
+	RET
+

@@ -41,6 +41,12 @@ func main() {
 		Ret()
 	f.Add(avx.Func())
 
+	// The gate in front of it. Without this the example calls a 256-bit
+	// instruction on whatever CPU runs it, which is an illegal instruction on
+	// anything older than Haswell -- the hazard every dispatched SIMD package
+	// has to handle, so the example that shows the kernel should show the gate.
+	f.Add(amd64.FeatureProbe("hasAVX2", amd64.AVX2))
+
 	if err := os.WriteFile("simd_amd64.s", []byte(f.String()), 0o644); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
