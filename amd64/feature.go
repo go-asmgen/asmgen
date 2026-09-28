@@ -1,0 +1,125 @@
+package amd64
+
+// Feature probes: the CPUID/XGETBV dance that every dispatched SIMD kernel
+// needs before it may use one.
+//
+// This is here because the fleet had two answers to one question. go-fft/fft
+// hand-wrote 24 lines of Plan 9 assembly for AVX2; go-simd/popcount and
+// go-simd/base64 instead took a runtime dependency on golang.org/x/sys/cpu,
+// which computes the same predicate. Neither is wrong, and having both is:
+// a generator that already writes the kernel should be able to write the gate
+// in front of it, so a package that wants no runtime dependency does not have
+// to hand-write CPUID to get one.
+//
+// ⛔ The OS half is not optional and is the part hand-written probes get wrong.
+// A CPU that reports AVX2 on a kernel that does not save YMM state will fault
+// or silently corrupt the upper lanes on a context switch, so the probe checks
+// OSXSAVE, then XGETBV's XMM and YMM bits, and only then the feature bit.
+// x/sys/cpu does exactly this (HasAVX2 = isSet(5, ebx7) && osSupportsAVX), and
+// so does the sequence below.
+
+import (
+	"fmt"
+
+	"github.com/go-asmgen/asmgen/emit"
+)
+
+// Feature is a CPU feature a probe can report on.
+type Feature int
+
+const (
+	// AVX2 reports 256-bit integer and floating-point vector support, with the
+	// OS saving YMM state. Callers: go-fft/fft's butterfly kernels.
+	AVX2 Feature = iota
+	// POPCNT reports the population-count instruction. Callers:
+	// go-simd/popcount.
+	POPCNT
+)
+
+// The list stops there on purpose. Every entry costs a probe sequence that has
+// to be right about its own OS-state requirement, and one nobody calls is one
+// nobody has run on hardware that lacks the feature. Add the next when a
+// caller needs it, not before.
+
+func (f Feature) String() string {
+	switch f {
+	case AVX2:
+		return "AVX2"
+	case POPCNT:
+		return "POPCNT"
+	}
+	return "Feature(?)"
+}
+
+// FeatureProbe returns a `func() bool` reporting whether both the processor
+// and the OS support f. The emitted function is NOSPLIT with no arguments and
+// a single bool result, so the Go side is one line:
+//
+//	func supportsAVX2() bool
+//
+// The label it branches to is derived from name, so several probes can share
+// one file — a fixed label would collide the moment a package needs two.
+func FeatureProbe(name string, f Feature) *emit.Function {
+	sig := Layout(nil, nil, []string{"ret"}, []Type{Uint8})
+	b := NewFunc(name, sig, 0)
+	done := name + "_unsupported"
+
+	// False first, so every branch out is a jump to the end and no path can
+	// fall through leaving the slot untouched.
+	b.Raw("MOVB $0, ret+0(FP)")
+
+	switch f {
+	case POPCNT:
+		// CPUID leaf 1, ECX bit 23. No OS state to check: POPCNT writes a
+		// general-purpose register.
+		b.Raw("MOVL $1, AX")
+		b.Raw("CPUID")
+		b.Raw("TESTL $0x800000, CX // POPCNT")
+		b.Raw("JZ %s", done)
+
+	case AVX2:
+		// Leaf 7 has to exist before it can be read: on a CPU whose maximum
+		// leaf is below 7, CPUID returns the highest supported leaf instead
+		// and the AVX2 bit would be read out of somebody else's answer.
+		b.Raw("XORL AX, AX")
+		b.Raw("CPUID")
+		b.Raw("CMPL AX, $7")
+		b.Raw("JL %s", done)
+
+		// Leaf 1: AVX (bit 28) and OSXSAVE (bit 27) together. XGETBV below is
+		// itself only legal once OSXSAVE says so.
+		b.Raw("MOVL $1, AX")
+		b.Raw("CPUID")
+		b.Raw("ANDL $0x18000000, CX // AVX and OSXSAVE")
+		b.Raw("CMPL CX, $0x18000000")
+		b.Raw("JNE %s", done)
+
+		// XCR0 bits 1 and 2: the OS saves XMM and YMM state across a context
+		// switch. Without this the feature bit is a promise the OS does not keep.
+		b.Raw("XORL CX, CX")
+		b.Raw("XGETBV")
+		b.Raw("ANDL $6, AX // XMM and YMM state enabled in XCR0")
+		b.Raw("CMPL AX, $6")
+		b.Raw("JNE %s", done)
+
+		// Leaf 7, EBX bit 5.
+		b.Raw("MOVL $7, AX")
+		b.Raw("XORL CX, CX")
+		b.Raw("CPUID")
+		b.Raw("TESTL $0x20, BX // AVX2")
+		b.Raw("JZ %s", done)
+
+	default:
+		// A generator must not emit a gate that says yes without asking. There
+		// is no sensible fallback here: every path out of this switch is
+		// followed by "report supported", so an unhandled Feature would produce
+		// a probe that unconditionally enables a kernel the CPU may not have.
+		// This is a build-time tool, so it fails at build time.
+		panic(fmt.Sprintf("amd64.FeatureProbe: unknown Feature(%d)", int(f)))
+	}
+
+	b.Raw("MOVB $1, ret+0(FP)")
+	b.Label(done)
+	b.Ret()
+	return b.Func()
+}
