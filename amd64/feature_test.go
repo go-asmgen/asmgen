@@ -140,7 +140,7 @@ func TestFeatureString(t *testing.T) {
 	for _, c := range []struct {
 		f    Feature
 		want string
-	}{{AVX2, "AVX2"}, {POPCNT, "POPCNT"}, {Feature(99), "Feature(?)"}} {
+	}{{AVX2, "AVX2"}, {POPCNT, "POPCNT"}, {AVX512F, "AVX512F"}, {Feature(99), "Feature(?)"}} {
 		if got := c.f.String(); got != c.want {
 			t.Errorf("Feature(%d).String() = %q, want %q", c.f, got, c.want)
 		}
@@ -162,4 +162,51 @@ func TestAnUnknownFeatureIsRefusedRatherThanWavedThrough(t *testing.T) {
 		}
 	}()
 	FeatureProbe("hasNothing", Feature(99))
+}
+
+// TestAVX512FChecksAllFiveStateComponents pins what makes AVX-512 different
+// from AVX2: the OS has to save three more state components (the opmask
+// registers, the upper halves of ZMM0–15, and ZMM16–31), so the XCR0 mask is
+// 0xE6, not AVX2's 6. A probe that reused AVX2's mask would enable 512-bit
+// kernels on a kernel that does not save ZMM state.
+func TestAVX512FChecksAllFiveStateComponents(t *testing.T) {
+	f := emit.NewFile("amd64")
+	f.Add(FeatureProbe("hasAVX512F", AVX512F))
+	s := f.String()
+	order := []string{
+		"CMPL AX, $7",          // leaf 7 exists
+		"ANDL $0x18000000, CX", // OSXSAVE (and AVX) before XGETBV
+		"XGETBV",
+		"ANDL $0xE6, AX", // XMM|YMM|opmask|ZMM_Hi256|Hi16_ZMM
+		"CMPL AX, $0xE6",
+		"TESTL $0x10000, BX", // CPUID.7.0:EBX bit 16, last
+	}
+	at := -1
+	for _, want := range order {
+		i := strings.Index(s, want)
+		if i < 0 {
+			t.Fatalf("the AVX512F probe does not contain %q:\n%s", want, s)
+		}
+		if i < at {
+			t.Errorf("%q comes before the step that must precede it:\n%s", want, s)
+		}
+		at = i
+	}
+	if strings.Contains(s, "ANDL $6, AX") {
+		t.Errorf("the AVX512F probe checks only AVX2's XCR0 bits:\n%s", s)
+	}
+}
+
+// TestAVX512FAndAVX2ProbesShareAFile: a package dispatching AVX-512 with an
+// AVX2 fallback needs both gates in one file.
+func TestAVX512FAndAVX2ProbesShareAFile(t *testing.T) {
+	f := emit.NewFile("amd64")
+	f.Add(FeatureProbe("hasAVX2", AVX2))
+	f.Add(FeatureProbe("hasAVX512F", AVX512F))
+	s := f.String()
+	for _, want := range []string{"hasAVX2_unsupported:", "hasAVX512F_unsupported:"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("no label %q in:\n%s", want, s)
+		}
+	}
 }
