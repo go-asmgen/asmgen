@@ -92,8 +92,18 @@ reserves locals addressed `name-N(SP)`. See [`examples/frame`](examples/frame).
 CPUID/XGETBV gate a dispatched kernel needs in front of it, as a `func() bool`,
 so a package that wants no runtime dependency does not have to hand-write CPUID
 to get one. The OS half is the part hand-rolled probes drop: a CPU can report
-AVX2 on a kernel that does not save YMM state. `POPCNT` is there too, and the
-list stops at what has callers.
+AVX2 on a kernel that does not save YMM state. `POPCNT` and `AVX512F` are
+there too (`AVX512F` also requires the OS to save opmask and ZMM state, XCR0
+mask 0xE6; on macOS it answers false, since Darwin enables that state lazily),
+and the list stops at what has callers.
+
+**arm64 vector float64 arithmetic the Go assembler lacks**: `cmd/asm` has the
+fused `VFMLA`/`VFMLS` but no vector `FADD`, `FSUB`, `FMUL` or `FNEG` for
+floating-point lanes. `Builder.VFADD2D`, `VFSUB2D`, `VFMUL2D`, `VFNEG2D` (and
+`VFMLA2D`/`VFMLS2D`, for one register convention) encode them as `WORD`s with
+the assembly in a comment, for the `.2D` arrangement. The encodings are pinned
+against the system assembler's output, and were run on Apple M4 and Neoverse-N1
+against Go's own arithmetic and `math.FMA`: bit-identical over 2.4M lanes.
 
 A typed vector-load helper (to drop the `Raw` boilerplate) and first-class vector
 *types* are the main remaining items.

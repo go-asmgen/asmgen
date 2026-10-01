@@ -34,6 +34,16 @@ const (
 	// POPCNT reports the population-count instruction. Callers:
 	// go-simd/popcount.
 	POPCNT
+	// AVX512F reports the AVX-512 foundation (512-bit ZMM registers and the
+	// opmask registers K0–K7), with the OS saving all of their state. Callers:
+	// go-fft/fft's Stockham pass kernels.
+	//
+	// On macOS the probe answers false even on hardware that has AVX-512:
+	// Darwin enables ZMM state lazily, on the first fault, so XCR0 does not
+	// show it to a process that has not used it yet (golang.org/x/sys/cpu reads
+	// a sysctl there instead). A false negative only means the caller falls
+	// back to its AVX2 kernel; a false positive would fault.
+	AVX512F
 )
 
 // The list stops there on purpose. Every entry costs a probe sequence that has
@@ -47,6 +57,8 @@ func (f Feature) String() string {
 		return "AVX2"
 	case POPCNT:
 		return "POPCNT"
+	case AVX512F:
+		return "AVX512F"
 	}
 	return "Feature(?)"
 }
@@ -107,6 +119,38 @@ func FeatureProbe(name string, f Feature) *emit.Function {
 		b.Raw("XORL CX, CX")
 		b.Raw("CPUID")
 		b.Raw("TESTL $0x20, BX // AVX2")
+		b.Raw("JZ %s", done)
+
+	case AVX512F:
+		// Leaf 7 must exist before it is read, as for AVX2.
+		b.Raw("XORL AX, AX")
+		b.Raw("CPUID")
+		b.Raw("CMPL AX, $7")
+		b.Raw("JL %s", done)
+
+		// Leaf 1: OSXSAVE (bit 27) makes XGETBV legal; AVX (bit 28) is part of
+		// the requirement, since AVX-512 extends the VEX register file.
+		b.Raw("MOVL $1, AX")
+		b.Raw("CPUID")
+		b.Raw("ANDL $0x18000000, CX // AVX and OSXSAVE")
+		b.Raw("CMPL CX, $0x18000000")
+		b.Raw("JNE %s", done)
+
+		// XCR0 bits 1, 2 (XMM, YMM) and 5, 6, 7 (opmask, the upper halves of
+		// ZMM0–15, and ZMM16–31): all five must be saved by the OS. Intel SDM
+		// vol. 1, 15.2 "Detection of AVX-512 Foundation Instructions"; x/sys/cpu
+		// tests the same bits (osSupportsAVX512).
+		b.Raw("XORL CX, CX")
+		b.Raw("XGETBV")
+		b.Raw("ANDL $0xE6, AX // XMM, YMM, opmask, ZMM_Hi256 and Hi16_ZMM state in XCR0")
+		b.Raw("CMPL AX, $0xE6")
+		b.Raw("JNE %s", done)
+
+		// Leaf 7, EBX bit 16.
+		b.Raw("MOVL $7, AX")
+		b.Raw("XORL CX, CX")
+		b.Raw("CPUID")
+		b.Raw("TESTL $0x10000, BX // AVX512F")
 		b.Raw("JZ %s", done)
 
 	default:
