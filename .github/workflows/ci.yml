@@ -70,6 +70,23 @@ jobs:
           path: cover.out
           if-no-files-found: warn
 
+  # Known vulnerabilities in the code the library and tools reach (the module has
+  # no dependencies, so this watches the standard library of the Go in use).
+  security:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/... ./wasm/... ./internal/... ./tools/...
+
   # amd64 is the easy target: the GitHub-hosted ubuntu runner is amd64, so the
   # generated assembly (scalar + SSE SIMD) runs natively — no qemu.
   asm-amd64:
