@@ -92,7 +92,8 @@ reserves locals addressed `name-N(SP)`. See [`examples/frame`](examples/frame).
 CPUID/XGETBV gate a dispatched kernel needs in front of it, as a `func() bool`,
 so a package that wants no runtime dependency does not have to hand-write CPUID
 to get one. The OS half is the part hand-rolled probes drop: a CPU can report
-AVX2 on a kernel that does not save YMM state. `POPCNT` and `AVX512F` are
+AVX2 on a kernel that does not save YMM state. `POPCNT`, `FMA` (CPUID leaf 1,
+separate from AVX2's leaf-7 bit) and `AVX512F` are
 there too (`AVX512F` also requires the OS to save opmask and ZMM state, XCR0
 mask 0xE6; on macOS it answers false, since Darwin enables that state lazily),
 and the list stops at what has callers.

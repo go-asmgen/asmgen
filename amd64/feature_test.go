@@ -140,7 +140,7 @@ func TestFeatureString(t *testing.T) {
 	for _, c := range []struct {
 		f    Feature
 		want string
-	}{{AVX2, "AVX2"}, {POPCNT, "POPCNT"}, {AVX512F, "AVX512F"}, {Feature(99), "Feature(?)"}} {
+	}{{AVX2, "AVX2"}, {POPCNT, "POPCNT"}, {AVX512F, "AVX512F"}, {FMA, "FMA"}, {Feature(99), "Feature(?)"}} {
 		if got := c.f.String(); got != c.want {
 			t.Errorf("Feature(%d).String() = %q, want %q", c.f, got, c.want)
 		}
@@ -208,5 +208,29 @@ func TestAVX512FAndAVX2ProbesShareAFile(t *testing.T) {
 		if !strings.Contains(s, want) {
 			t.Errorf("no label %q in:\n%s", want, s)
 		}
+	}
+}
+
+// TestFMAChecksLeafOneAndTheOS pins the two things an FMA gate must not get
+// wrong. The feature bit is CPUID.1:ECX bit 12 -- not a leaf-7 bit like AVX2 --
+// and it is tested together with AVX and OSXSAVE in one mask, so a CPU that
+// reports FMA with AVX disabled says no. And because VFMADD* writes YMM
+// registers, XCR0 must show YMM state saved: the same OS half as AVX2.
+func TestFMAChecksLeafOneAndTheOS(t *testing.T) {
+	f := emit.NewFile("amd64")
+	f.Add(FeatureProbe("hasFMA", FMA))
+	s := f.String()
+	for _, want := range []string{
+		"ANDL $0x18001000, CX", // FMA | AVX | OSXSAVE
+		"CMPL CX, $0x18001000", // all three, not any
+		"XGETBV",
+		"ANDL $6, AX", // XCR0 XMM+YMM
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("the FMA probe does not contain %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "MOVL $7, AX") {
+		t.Errorf("the FMA probe reads leaf 7, where FMA is not:\n%s", s)
 	}
 }
