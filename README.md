@@ -101,13 +101,15 @@ and the list stops at what has callers. `amd64.VendorProbe(name, "GenuineIntel")
 differ by vendor (go-fft's radix rule); it never gates correctness, since a
 hypervisor may report its own vendor.
 
-**arm64 vector float64 arithmetic the Go assembler lacks**: `cmd/asm` has the
-fused `VFMLA`/`VFMLS` but no vector `FADD`, `FSUB`, `FMUL` or `FNEG` for
-floating-point lanes. `Builder.VFADD2D`, `VFSUB2D`, `VFMUL2D`, `VFNEG2D` (and
-`VFMLA2D`/`VFMLS2D`, for one register convention) encode them as `WORD`s with
-the assembly in a comment, for the `.2D` arrangement. The encodings are pinned
-against the system assembler's output, and were run on Apple M4 and Neoverse-N1
-against Go's own arithmetic and `math.FMA`: bit-identical over 2.4M lanes.
+**arm64 vector float64 arithmetic**: `Builder.VFADD2D`, `VFSUB2D`, `VFMUL2D`,
+`VFNEG2D`, `VFMLA2D` and `VFMLS2D` emit `VFADD`/`VFSUB`/`VFMUL`/`VFNEG`/`VFMLA`/
+`VFMLS` on the `.D2` arrangement and leave the encoding to `cmd/asm`, which has
+had the first four since Go 1.27; the module therefore requires Go 1.27. (Up
+to v0.14 they were hand-encoded `WORD`s; the output is now mnemonics, the
+machine code is the same.) A test assembles them with `cmd/asm` and compares
+the result with the system assembler's encodings. Kernels built from them ran
+on Apple M4 and Neoverse-N1 against Go's own arithmetic and `math.FMA`:
+bit-identical over 2.4M lanes.
 
 **ppc64le VSX float64 arithmetic the Go assembler lacks**: `cmd/asm` has the
 VSX loads, stores and permutes (`LXVD2X`, `LXVDSX`, `STXVD2X`, `XXPERMDI`) but
@@ -118,6 +120,10 @@ as `WORD`s over VSX registers 0–63. The encodings are pinned against GNU as
 example kernels in `examples/simd/ppc64` were run on POWER8 and POWER9 against
 Go's arithmetic, `math.Sqrt` and `math.FMA`: bit-identical. (`XVMAXDP`/`XVMINDP`
 follow the ISA's NaN rule, not Go's NaN-propagating `max`.)
+These `WORD`s are transitional: go-asmgen otherwise leaves encoding to
+`cmd/asm`, but no Go release, master included, assembles VSX vector double
+arithmetic.
+When one does, the methods will emit its mnemonics, as the arm64 ones did.
 
 **loong64 LSX/LASX float64 instructions the Go assembler lacks**: `cmd/asm`
 has the vector float64 add/sub/mul/div (`VADDD`, `XVMULD`, …) but no fused

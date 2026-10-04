@@ -1,19 +1,24 @@
 package arm64
 
 import (
-	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
 
 // vfpGolden (vfp_golden_test.go) was produced by the system assembler (Apple
 // clang's `as -arch arm64`, read back with `otool -t`) from the assembly in
-// each comment, covering every register field at 0, 31 and in between. It is
-// the reference the hand encoding has to match.
+// each comment, covering every register field at 0, 31 and in between. The
+// test hands the builder's text to cmd/asm and requires the same words back:
+// that checks the mnemonic, the operand order and the register numbers in one
+// go, with the Go assembler doing the encoding.
 
 func TestVectorFloatEncodings(t *testing.T) {
+	b := NewFunc("k", Layout(nil, nil, nil, nil), 0)
 	for _, g := range vfpGolden {
-		b := NewFunc("k", Layout(nil, nil, nil, nil), 0)
 		r := g.regs
 		switch g.op {
 		case "fadd":
@@ -29,11 +34,62 @@ func TestVectorFloatEncodings(t *testing.T) {
 		case "fneg":
 			b.VFNEG2D(r[0], r[1])
 		}
-		want := fmt.Sprintf("WORD $0x%08x // %s", g.want, g.op)
-		if s := b.Func().String(); !strings.Contains(s, want) {
-			t.Errorf("%s %v: emitted\n%s\nwant a line starting %q", g.op, r, s, want)
+	}
+	src := b.Func().String()
+	if strings.Contains(src, "WORD") {
+		t.Fatalf("hand-encoded instruction in the output; cmd/asm must do the encoding:\n%s", src)
+	}
+	got := assembleArm64(t, src)
+	if len(got) < len(vfpGolden) {
+		t.Fatalf("cmd/asm produced %d words for %d instructions:\n%s", len(got), len(vfpGolden), src)
+	}
+	lines := strings.Split(strings.TrimSpace(src), "\n")[1:]
+	for i, g := range vfpGolden {
+		if got[i] != g.want {
+			t.Errorf("%s %v: %q assembled to %#08x, the system assembler gives %#08x",
+				g.op, g.regs, strings.TrimSpace(lines[i]), got[i], g.want)
 		}
 	}
+}
+
+// assembleArm64 runs the Go assembler on one TEXT block and returns the
+// instruction words, in order, as objdump reports them.
+func assembleArm64(t *testing.T, text string) []uint32 {
+	t.Helper()
+	goroot, err := exec.Command("go", "env", "GOROOT").Output()
+	if err != nil {
+		t.Skipf("no go command to assemble with: %v", err)
+	}
+	dir := t.TempDir()
+	s := filepath.Join(dir, "k.s")
+	o := filepath.Join(dir, "k.o")
+	if err := os.WriteFile(s, []byte("#include \"textflag.h\"\n"+text+"\tRET\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	inc := filepath.Join(strings.TrimSpace(string(goroot)), "pkg", "include")
+	run := func(args ...string) []byte {
+		cmd := exec.Command("go", args...)
+		cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH=arm64")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("go %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		return out
+	}
+	run("tool", "asm", "-p", "k", "-I", inc, "-o", o, s)
+	var words []uint32
+	for _, line := range strings.Split(string(run("tool", "objdump", o)), "\n") {
+		f := strings.Fields(line)
+		if len(f) < 3 || !strings.HasPrefix(f[1], "0x") {
+			continue
+		}
+		w, err := strconv.ParseUint(f[2], 16, 32)
+		if err != nil {
+			t.Fatalf("objdump line %q: %v", line, err)
+		}
+		words = append(words, uint32(w))
+	}
+	return words
 }
 
 func TestVectorFloatRefusesARegisterThatDoesNotExist(t *testing.T) {

@@ -4,6 +4,14 @@ import "fmt"
 
 // VSX float64 arithmetic the Go assembler does not have.
 //
+// TRANSITIONAL. go-asmgen emits Plan 9 text and lets cmd/asm encode it; these
+// methods encode by hand only because no Go release, master included (checked
+// 2026-10-04), assembles VSX vector double arithmetic. A patch adding the mnemonics to cmd/internal/obj/ppc64 is being
+// prepared; once a Go release carries it, these methods emit the mnemonics
+// instead, as the arm64 vector-float methods did when Go 1.27 added theirs.
+// Until then, the WORDs bypass cmd/asm's operand checks, which is why vsr
+// refuses bad registers here and the encodings are pinned against GNU as.
+//
 // cmd/asm has the VSX loads, stores, splats and permutes (LXVD2X, LXVDSX,
 // STXVD2X, XXPERMDI, ...) but none of the vector double-precision arithmetic:
 // no XVADDDP, XVMULDP or XVMADDADP. A float64 kernel on ppc64le either runs
