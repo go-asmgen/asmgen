@@ -234,3 +234,46 @@ func TestFMAChecksLeafOneAndTheOS(t *testing.T) {
 		t.Errorf("the FMA probe reads leaf 7, where FMA is not:\n%s", s)
 	}
 }
+
+// TestVendorProbeSpellsTheStringInCPUIDOrder checks the three constants for
+// "GenuineIntel" against the values the Intel SDM gives for CPUID leaf 0
+// (EBX = "Genu" 0x756E6547, EDX = "ineI" 0x49656E69, ECX = "ntel" 0x6C65746E):
+// the register order is EBX, EDX, ECX, not alphabetical, and a probe that
+// compared ECX second would never match.
+func TestVendorProbeSpellsTheStringInCPUIDOrder(t *testing.T) {
+	f := emit.NewFile("amd64")
+	f.Add(VendorProbe("isIntel", "GenuineIntel"))
+	got := body(f.String())
+	want := []string{
+		"TEXT ·isIntel(SB), NOSPLIT, $0-1",
+		"MOVB $0, ret+0(FP)",
+		"XORL AX, AX",
+		"CPUID",
+		`CMPL BX, $0x756e6547 // "Genu"`,
+		"JNE isIntel_other",
+		`CMPL DX, $0x49656e69 // "ineI"`,
+		"JNE isIntel_other",
+		`CMPL CX, $0x6c65746e // "ntel"`,
+		"JNE isIntel_other",
+		"MOVB $1, ret+0(FP)",
+		"isIntel_other:",
+		"RET",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("VendorProbe(GenuineIntel):\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// TestVendorProbeRefusesAWrongLength: CPUID leaf 0 holds exactly twelve bytes.
+func TestVendorProbeRefusesAWrongLength(t *testing.T) {
+	for _, v := range []string{"", "Intel", "GenuineIntel!"} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("VendorProbe(%q) did not panic", v)
+				}
+			}()
+			VendorProbe("p", v)
+		}()
+	}
+}

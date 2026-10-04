@@ -192,3 +192,40 @@ func FeatureProbe(name string, f Feature) *emit.Function {
 	b.Ret()
 	return b.Func()
 }
+
+// VendorProbe returns a `func() bool` reporting whether the processor's CPUID
+// vendor string (leaf 0) is vendor: "GenuineIntel", "AuthenticAMD",
+// "HygonGenuine", and so on. It is for tuning choices measured to differ by
+// vendor — never for correctness, which a feature probe decides. CPUID leaf 0
+// returns the twelve bytes in EBX, EDX and ECX, in that order, little-endian;
+// the probe compares the three registers against the constants the string
+// spells. A hypervisor may report its own vendor string, so a caller must
+// treat false as "not known to be this vendor" and keep a safe default.
+//
+// vendor must be exactly 12 bytes long: CPUID leaf 0 has room for no more and
+// no fewer, and a shorter string would compare against bytes the caller never
+// wrote. A wrong length is a programming error in the generator, so it panics.
+func VendorProbe(name, vendor string) *emit.Function {
+	if len(vendor) != 12 {
+		panic(fmt.Sprintf("amd64.VendorProbe: vendor %q is %d bytes, CPUID leaf 0 holds exactly 12", vendor, len(vendor)))
+	}
+	word := func(i int) uint32 {
+		return uint32(vendor[i]) | uint32(vendor[i+1])<<8 | uint32(vendor[i+2])<<16 | uint32(vendor[i+3])<<24
+	}
+	sig := Layout(nil, nil, []string{"ret"}, []Type{Uint8})
+	b := NewFunc(name, sig, 0)
+	done := name + "_other"
+	b.Raw("MOVB $0, ret+0(FP)")
+	b.Raw("XORL AX, AX")
+	b.Raw("CPUID")
+	b.Raw("CMPL BX, $0x%08x // %q", word(0), vendor[0:4])
+	b.Raw("JNE %s", done)
+	b.Raw("CMPL DX, $0x%08x // %q", word(4), vendor[4:8])
+	b.Raw("JNE %s", done)
+	b.Raw("CMPL CX, $0x%08x // %q", word(8), vendor[8:12])
+	b.Raw("JNE %s", done)
+	b.Raw("MOVB $1, ret+0(FP)")
+	b.Label(done)
+	b.Ret()
+	return b.Func()
+}
