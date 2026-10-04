@@ -44,6 +44,13 @@ const (
 	// a sysctl there instead). A false negative only means the caller falls
 	// back to its AVX2 kernel; a false positive would fault.
 	AVX512F
+	// FMA reports the three-operand fused multiply-add (FMA3: VFMADD231PD and
+	// family), with the OS saving YMM state. It is a separate CPUID bit from
+	// AVX2 (leaf 1 ECX bit 12, not leaf 7), so a kernel that issues VFMADD*
+	// must probe it on its own: every Intel and AMD part since Haswell and
+	// Piledriver has both, but a hypervisor can mask one without the other.
+	// Callers: go-ndarray/ndarray's GEMM micro-kernel.
+	FMA
 )
 
 // The list stops there on purpose. Every entry costs a probe sequence that has
@@ -59,6 +66,8 @@ func (f Feature) String() string {
 		return "POPCNT"
 	case AVX512F:
 		return "AVX512F"
+	case FMA:
+		return "FMA"
 	}
 	return "Feature(?)"
 }
@@ -152,6 +161,22 @@ func FeatureProbe(name string, f Feature) *emit.Function {
 		b.Raw("CPUID")
 		b.Raw("TESTL $0x10000, BX // AVX512F")
 		b.Raw("JZ %s", done)
+
+	case FMA:
+		// Leaf 1 alone: FMA3 is a leaf-1 ECX bit, so unlike AVX2 there is no
+		// leaf-7 read and no max-leaf check in front of one. The OS half is
+		// AVX2's: the instructions are VEX-encoded and write YMM registers.
+		b.Raw("MOVL $1, AX")
+		b.Raw("CPUID")
+		b.Raw("ANDL $0x18001000, CX // FMA, AVX and OSXSAVE")
+		b.Raw("CMPL CX, $0x18001000")
+		b.Raw("JNE %s", done)
+
+		b.Raw("XORL CX, CX")
+		b.Raw("XGETBV")
+		b.Raw("ANDL $6, AX // XMM and YMM state enabled in XCR0")
+		b.Raw("CMPL AX, $6")
+		b.Raw("JNE %s", done)
 
 	default:
 		// A generator must not emit a gate that says yes without asking. There
