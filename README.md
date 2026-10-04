@@ -104,7 +104,7 @@ hypervisor may report its own vendor.
 **arm64 vector float64 arithmetic**: `Builder.VFADD2D`, `VFSUB2D`, `VFMUL2D`,
 `VFNEG2D`, `VFMLA2D` and `VFMLS2D` emit `VFADD`/`VFSUB`/`VFMUL`/`VFNEG`/`VFMLA`/
 `VFMLS` on the `.D2` arrangement and leave the encoding to `cmd/asm`, which has
-had the first four since Go 1.27; the module therefore requires Go 1.27. (Up
+had the first four since Go 1.27; the module therefore requires Go 1.27 (1.27.1 since v0.15.2). (Up
 to v0.14 they were hand-encoded `WORD`s; the output is now mnemonics, the
 machine code is the same.) A test assembles them with `cmd/asm` and compares
 the result with the system assembler's encodings. Kernels built from them ran
