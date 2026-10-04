@@ -109,6 +109,16 @@ the assembly in a comment, for the `.2D` arrangement. The encodings are pinned
 against the system assembler's output, and were run on Apple M4 and Neoverse-N1
 against Go's own arithmetic and `math.FMA`: bit-identical over 2.4M lanes.
 
+**ppc64le VSX float64 arithmetic the Go assembler lacks**: `cmd/asm` has the
+VSX loads, stores and permutes (`LXVD2X`, `LXVDSX`, `STXVD2X`, `XXPERMDI`) but
+no vector double arithmetic. `Builder.XVADDDP`, `XVSUBDP`, `XVMULDP`,
+`XVDIVDP`, `XVMADDADP` (fused), `XVMAXDP`, `XVMINDP` and `XVSQRTDP` encode them
+as `WORD`s over VSX registers 0–63. The encodings are pinned against GNU as
+2.44 on a POWER9 (70 cases, every register field at 0, 31, 32 and 63), and the
+example kernels in `examples/simd/ppc64` were run on POWER8 and POWER9 against
+Go's arithmetic, `math.Sqrt` and `math.FMA`: bit-identical. (`XVMAXDP`/`XVMINDP`
+follow the ISA's NaN rule, not Go's NaN-propagating `max`.)
+
 A typed vector-load helper (to drop the `Raw` boilerplate) and first-class vector
 *types* are the main remaining items.
 
