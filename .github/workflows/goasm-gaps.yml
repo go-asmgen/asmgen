@@ -30,6 +30,8 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
+          # Deliberately the channel, not a pinned version: this job's
+          # question is what the NEWEST Go release can assemble. ci.yml pins.
           go-version: stable
 
       - name: Build goasmgap

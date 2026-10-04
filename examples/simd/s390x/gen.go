@@ -35,8 +35,8 @@ func main() {
 		b.LoadArg("a", "R1").
 			LoadArg("b", "R2").
 			LoadArg("out", "R3").
-			Raw("VL (R1), V0"). // load 16 bytes of a (big-endian: lane 0 = lowest addr)
-			Raw("VL (R2), V1"). // load 16 bytes of b
+			Raw("VL (R1), V0").   // load 16 bytes of a (big-endian: lane 0 = lowest addr)
+			Raw("VL (R2), V1").   // load 16 bytes of b
 			Raw("VX V0, V1, V2"). // V2 = V0 XOR V1 (per-byte; lane order irrelevant)
 			Raw("VST V2, (R3)").  // store 16 bytes to out
 			Ret()

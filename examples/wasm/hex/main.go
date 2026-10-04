@@ -4,24 +4,24 @@
 //
 // Algorithm (same as the amd64 SSSE3 kernel in go-simd/hex):
 //
-//   for i in 0..nBlocks:
-//     bytes = v128.load(src + 16*i)
-//     hi    = (bytes >> 4) & 0x0f     // high nibbles
-//     lo    = bytes & 0x0f            // low nibbles
-//     hiCh  = swizzle(LUT, hi)        // ASCII high-nibble chars
-//     loCh  = swizzle(LUT, lo)        // ASCII low-nibble chars
-//     out0  = interleaveLow(hiCh, loCh)   // chars for bytes 0..7
-//     out1  = interleaveHigh(hiCh, loCh)  // chars for bytes 8..15
-//     store out0 @ dst + 32*i
-//     store out1 @ dst + 32*i + 16
+//	for i in 0..nBlocks:
+//	  bytes = v128.load(src + 16*i)
+//	  hi    = (bytes >> 4) & 0x0f     // high nibbles
+//	  lo    = bytes & 0x0f            // low nibbles
+//	  hiCh  = swizzle(LUT, hi)        // ASCII high-nibble chars
+//	  loCh  = swizzle(LUT, lo)        // ASCII low-nibble chars
+//	  out0  = interleaveLow(hiCh, loCh)   // chars for bytes 0..7
+//	  out1  = interleaveHigh(hiCh, loCh)  // chars for bytes 8..15
+//	  store out0 @ dst + 32*i
+//	  store out1 @ dst + 32*i + 16
 //
 // The interleave uses i8x16.shuffle with fixed immediates that map to
 // SSSE3 PUNPCKLBW / PUNPCKHBW. See the shuffle constants below.
 //
 // Signature (as seen by //go:wasmimport consumers):
 //
-//   (func $hex_encode (param $dstPtr i32) (param $srcPtr i32)
-//                     (param $nBlocks i32))
+//	(func $hex_encode (param $dstPtr i32) (param $srcPtr i32)
+//	                  (param $nBlocks i32))
 //
 // Each block converts 16 input bytes → 32 hex chars. The Go caller passes
 // nBlocks = len(src)/16 and handles the tail with a scalar 1-byte-per-iter

@@ -11,35 +11,35 @@
 // "Faster Base64 Encoding and Decoding using AVX2 Instructions",
 // arXiv:1704.00605):
 //
-//   1. Load 16 input bytes (12 real + 4 tail, harmlessly masked out).
-//   2. Shuffle bytes so each 3-byte input group maps to two u16 lanes
-//      (b0<<8|b1) and (b1<<8|b2) — this arranges the 24 bits of each
-//      triplet as two adjacent big-endian words with 4 bits of overlap.
-//   3. Extract the four 6-bit indexes per triplet with two rounds:
-//      Round 1 (PMULHUW-style): mask 0x0fc0_fc00 then multiply by
-//        0x0400_0040 and take the high 16 of the u32 product. Wasm-SIMD
-//        lacks PMULHUW, so this is emulated with i32x4.extmul_low/high
-//        + i32x4.shr_u by 16 + i16x8.narrow_i32x4_u.
-//      Round 2 (PMULLW-style): mask 0x003f_03f0 then multiply by
-//        0x0100_0010 via i16x8.mul (which IS PMULLW).
-//   4. OR the two rounds — the final v128 now holds all 16 6-bit
-//      indexes (0..63) sequentially in its 16 byte lanes.
-//   5. Convert each 6-bit index to an ASCII char using the range-add
-//      pattern:
-//        result = idx + 65
-//                 + (idx > 25 ? 6   : 0)   ; 'a'..'z' offset
-//                 + (idx > 51 ? -75 : 0)   ; '0'..'9' offset
-//                 + (idx == 62 ? -15 : 0)  ; '+' offset
-//                 + (idx == 63 ? -12 : 0)  ; '/' offset
-//      Each conditional is a mask (i8x16.gt_u / i8x16.eq) AND-ed with
-//      the offset broadcast, then summed in via i8x16.add. Negative
-//      offsets go modular (e.g. -75 becomes 181).
-//   6. v128.store the 16 ASCII chars.
+//  1. Load 16 input bytes (12 real + 4 tail, harmlessly masked out).
+//  2. Shuffle bytes so each 3-byte input group maps to two u16 lanes
+//     (b0<<8|b1) and (b1<<8|b2) — this arranges the 24 bits of each
+//     triplet as two adjacent big-endian words with 4 bits of overlap.
+//  3. Extract the four 6-bit indexes per triplet with two rounds:
+//     Round 1 (PMULHUW-style): mask 0x0fc0_fc00 then multiply by
+//     0x0400_0040 and take the high 16 of the u32 product. Wasm-SIMD
+//     lacks PMULHUW, so this is emulated with i32x4.extmul_low/high
+//     + i32x4.shr_u by 16 + i16x8.narrow_i32x4_u.
+//     Round 2 (PMULLW-style): mask 0x003f_03f0 then multiply by
+//     0x0100_0010 via i16x8.mul (which IS PMULLW).
+//  4. OR the two rounds — the final v128 now holds all 16 6-bit
+//     indexes (0..63) sequentially in its 16 byte lanes.
+//  5. Convert each 6-bit index to an ASCII char using the range-add
+//     pattern:
+//     result = idx + 65
+//     + (idx > 25 ? 6   : 0)   ; 'a'..'z' offset
+//     + (idx > 51 ? -75 : 0)   ; '0'..'9' offset
+//     + (idx == 62 ? -15 : 0)  ; '+' offset
+//     + (idx == 63 ? -12 : 0)  ; '/' offset
+//     Each conditional is a mask (i8x16.gt_u / i8x16.eq) AND-ed with
+//     the offset broadcast, then summed in via i8x16.add. Negative
+//     offsets go modular (e.g. -75 becomes 181).
+//  6. v128.store the 16 ASCII chars.
 //
 // Signature:
 //
-//   (func $base64_encode (param $dstPtr i32) (param $srcPtr i32)
-//                        (param $nBlocks i32))
+//	(func $base64_encode (param $dstPtr i32) (param $srcPtr i32)
+//	                     (param $nBlocks i32))
 //
 // nBlocks blocks × 12 input bytes → nBlocks × 16 output chars. Caller
 // ensures srcPtr has (nBlocks * 12 + 4) bytes readable — the last

@@ -17,9 +17,11 @@
 //	v128.store64_lane bytes @ (dst + 8*i, lane 0)               ; store 8 bytes
 //
 // The three range-mask offsets encode the ASCII-to-nibble arithmetic:
-//   '0' (48) - 0  = 48   → subtract 48 from digits so they become 0..9
-//   'A' (65) - 10 = 55   → subtract 55 from uppercase so they become 10..15
-//   'a' (97) - 10 = 87   → subtract 87 from lowercase so they become 10..15
+//
+//	'0' (48) - 0  = 48   → subtract 48 from digits so they become 0..9
+//	'A' (65) - 10 = 55   → subtract 55 from uppercase so they become 10..15
+//	'a' (97) - 10 = 87   → subtract 87 from lowercase so they become 10..15
+//
 // AND-with-mask + OR combines them into a single per-lane offset vector so
 // each lane sees exactly the offset for its own range. Anything outside
 // the three ranges (whitespace, punctuation, invalid input) subtracts 0,

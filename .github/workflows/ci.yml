@@ -9,9 +9,11 @@ on:
 permissions:
   contents: read
 
-# Always build with the latest stable Go toolchain. Some emitted instructions
-# (RISC-V Vector, LoongArch LSX) are only known to recent assemblers, so the
-# whole project tracks the current Go rather than pinning an old version.
+# Go is pinned to the go.mod floor, 1.27.1: the arm64 vector-float mnemonics
+# need Go 1.27, and RISC-V Vector / LoongArch LSX need 1.25. A pinned version
+# is what lets Renovate propose the next one for review instead of the
+# toolchain moving with no commit. goasm-gaps.yml alone follows `stable`,
+# because its question is what the newest release can assemble.
 jobs:
   # The library (shared ABI0 model + per-arch builders + ISA-agnostic emit) is
   # ordinary architecture-independent Go: it builds and is coverage-gated
@@ -31,7 +33,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version: '1.27.1'
 
       - name: Show Go version
         run: go version
@@ -41,6 +43,14 @@ jobs:
 
       - name: Build
         run: go build ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/... ./wasm/...
+
+      - name: gofmt
+        if: runner.os == 'Linux'
+        # With Go pinned, gofmt's rules change only in a reviewed bump, so
+        # this cannot turn red on its own.
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then echo "::error::not gofmt-formatted:"; echo "$unformatted"; exit 1; fi
 
       - name: Test + 100% coverage gate
         shell: bash
@@ -82,7 +92,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version: '1.27.1'
 
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/... ./wasm/... ./internal/... ./tools/...
@@ -99,7 +109,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version: '1.27.1'
 
       - name: Confirm amd64
         run: go env GOARCH GOHOSTARCH
@@ -138,7 +148,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version: '1.27.1'
 
       - name: Confirm arm64
         run: go env GOARCH GOHOSTARCH
@@ -172,7 +182,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version: '1.27.1'
 
       - name: Install qemu-user-static
         run: sudo apt-get update && sudo apt-get install -y qemu-user-static
@@ -208,7 +218,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version: '1.27.1'
 
       - name: Install qemu-user-static
         run: sudo apt-get update && sudo apt-get install -y qemu-user-static
@@ -245,7 +255,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version: '1.27.1'
 
       - name: Install qemu-user-static
         run: sudo apt-get update && sudo apt-get install -y qemu-user-static
@@ -277,7 +287,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version: '1.27.1'
 
       - name: Install qemu-user-static
         run: sudo apt-get update && sudo apt-get install -y qemu-user-static
@@ -315,7 +325,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version: '1.27.1'
 
       - name: Install WABT (wat2wasm)
         run: |
