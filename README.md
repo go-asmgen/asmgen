@@ -114,27 +114,39 @@ bit-identical over 2.4M lanes.
 **ppc64le VSX float64 arithmetic the Go assembler lacks**: `cmd/asm` has the
 VSX loads, stores and permutes (`LXVD2X`, `LXVDSX`, `STXVD2X`, `XXPERMDI`) but
 no vector double arithmetic. `Builder.XVADDDP`, `XVSUBDP`, `XVMULDP`,
-`XVDIVDP`, `XVMADDADP` (fused), `XVMAXDP`, `XVMINDP` and `XVSQRTDP` encode them
-as `WORD`s over VSX registers 0–63. The encodings are pinned against GNU as
-2.44 on a POWER9 (70 cases, every register field at 0, 31, 32 and 63), and the
-example kernels in `examples/simd/ppc64` were run on POWER8 and POWER9 against
-Go's arithmetic, `math.Sqrt` and `math.FMA`: bit-identical. (`XVMAXDP`/`XVMINDP`
-follow the ISA's NaN rule, not Go's NaN-propagating `max`.)
-These `WORD`s are transitional: go-asmgen otherwise leaves encoding to
-`cmd/asm`, but no Go release, master included, assembles VSX vector double
-arithmetic.
-When one does, the methods will emit its mnemonics, as the arm64 ones did.
+`XVDIVDP`, `XVMADDADP` (fused), `XVMAXDP`, `XVMINDP` and `XVSQRTDP` emit them as
+`WORD`s over VSX registers 0–63. Each `WORD` carries the spelling proposed for
+`cmd/asm` as its comment. The encodings are pinned against GNU as 2.44 on a
+POWER9 (70 cases, every register field at 0, 31, 32 and 63). The example
+kernels in `examples/simd/ppc64` were run on POWER8 and POWER9 against Go's
+arithmetic, `math.Sqrt` and `math.FMA`, and the results were bit-identical.
+(`XVMAXDP`/`XVMINDP` follow the ISA's NaN rule, not Go's NaN-propagating
+`max`.)
 
-**loong64 LSX/LASX float64 instructions the Go assembler lacks**: `cmd/asm`
-has the vector float64 add/sub/mul/div (`VADDD`, `XVMULD`, …) but no fused
-multiply-add and no broadcast load. `Builder.XVFMADDD`/`VFMADDD` (fused,
-four/two lanes) and `XVLDREPLD`/`VLDREPLD` (load one float64 into every lane)
-encode them as `WORD`s. The encodings are pinned against GNU as 2.43 on a
-Loongson 3C5000L (32 cases, register fields at 0 and 31, offsets at the ends
-of the field), and the example kernels in `examples/simd/loong64` were run on
-that machine against `math.FMA`: bit-identical. *Transitional*: Go 1.27.1 and
-master have no mnemonic for these (`VMADDV`/`XVMADDV` are the integer
-multiply-adds); when cmd/asm gains one, these methods will emit it instead.
+**loong64 LSX/LASX fused multiply-add and broadcast load**:
+`Builder.XVFMADDD`/`VFMADDD` (fused, four/two lanes) are `WORD`s, because
+`cmd/asm` has no vector float FMA (`VMADDV`/`XVMADDV` are the integer ones).
+`XVLDREPLD`/`VLDREPLD` (one float64 into every lane) emit `XVMOVQ off(R),
+X.V4` / `VMOVQ off(R), V.V2`, which is how `cmd/asm` spells `xvldrepl.d` /
+`vldrepl.d`. It has done so since at least Go 1.26. The one exception is
+offset −2048: the ISA allows it, `cmd/asm` refuses it, so it stays a `WORD`.
+The encodings are pinned against GNU as 2.43 on a Loongson 3C5000L (32 cases),
+and the example kernels in `examples/simd/loong64` were run on that machine
+against `math.FMA`, with bit-identical results.
+
+**Instructions `cmd/asm` lacks are transitional.** Every `WORD` above has an
+entry in `internal/gap`: its encoding, the independent references, the
+opcode mask, and the Plan 9 spelling proposed upstream. `tools/goasmgap`
+works from that registry:
+
+- it finds an instruction in Go's test data by encoding, under whatever name
+  Go gives it;
+- it writes the `cmd/asm` test lines for an upstream patch;
+- it holds a toolchain to every reference case.
+
+The patches live in [`goasm-patches/`](goasm-patches/). A weekly workflow
+opens an issue when a Go release or master gains one of these instructions,
+and checks that the patches still apply to master and still encode correctly.
 
 A typed vector-load helper (to drop the `Raw` boilerplate) and first-class vector
 *types* are the main remaining items.

@@ -45,7 +45,7 @@ jobs:
       - name: Test + 100% coverage gate
         shell: bash
         run: |
-          go test -race -coverprofile=cover.out ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/... ./wasm/...
+          go test -race -coverprofile=cover.out ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/... ./wasm/... ./internal/...
           go tool cover -func=cover.out | tee cover.txt
           # Org-wide hard rule: the library is held to 100% statement coverage.
           # Every branch must be reachable from a test or the dead code is
@@ -55,6 +55,12 @@ jobs:
           echo "library coverage: ${cov}%"
           awk -v t="$cov" 'BEGIN { exit !(t+0 >= 100.0) }' || {
             echo "::error::library coverage ${cov}% < 100%"; exit 1; }
+
+      - name: Test tools
+        shell: bash
+        # goasmgap drives the Go assembler for every target, so it is tested
+        # here too, but it is a command, not library code: outside the gate.
+        run: go test ./tools/...
 
       - name: Upload coverage profile
         if: always()

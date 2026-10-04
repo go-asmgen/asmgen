@@ -1,43 +1,42 @@
 package ppc64
 
 import (
-	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/go-asmgen/asmgen/internal/gap"
 )
 
-// vsxGolden (vsx_golden_test.go) covers every register field at 0, 31, 32 and
-// 63 — the boundary between the low five bits and the high bit stored apart in
-// AX/BX/TX — and mixes in between.
-
-func TestVSXEncodings(t *testing.T) {
-	for _, g := range vsxGolden {
-		b := NewFunc("k", Layout(nil, nil, nil, nil), 0)
-		r := g.regs
-		switch g.op {
-		case "xvadddp":
-			b.XVADDDP(r[0], r[1], r[2])
-		case "xvsubdp":
-			b.XVSUBDP(r[0], r[1], r[2])
-		case "xvmuldp":
-			b.XVMULDP(r[0], r[1], r[2])
-		case "xvdivdp":
-			b.XVDIVDP(r[0], r[1], r[2])
-		case "xvmaddadp":
-			b.XVMADDADP(r[0], r[1], r[2])
-		case "xvmaxdp":
-			b.XVMAXDP(r[0], r[1], r[2])
-		case "xvmindp":
-			b.XVMINDP(r[0], r[1], r[2])
-		case "xvsqrtdp":
-			b.XVSQRTDP(r[0], r[1])
-		default:
-			t.Fatalf("golden has an op with no encoder: %s", g.op)
+// The encodings are tested against their references in internal/gap; this
+// checks each method emits its own entry, operands in ISA order.
+func TestVSXEmitsTheRegistryWord(t *testing.T) {
+	ops := map[string]func(*Builder, []int){
+		"xvadddp":   func(b *Builder, r []int) { b.XVADDDP(r[0], r[1], r[2]) },
+		"xvsubdp":   func(b *Builder, r []int) { b.XVSUBDP(r[0], r[1], r[2]) },
+		"xvmuldp":   func(b *Builder, r []int) { b.XVMULDP(r[0], r[1], r[2]) },
+		"xvdivdp":   func(b *Builder, r []int) { b.XVDIVDP(r[0], r[1], r[2]) },
+		"xvmaddadp": func(b *Builder, r []int) { b.XVMADDADP(r[0], r[1], r[2]) },
+		"xvmaxdp":   func(b *Builder, r []int) { b.XVMAXDP(r[0], r[1], r[2]) },
+		"xvmindp":   func(b *Builder, r []int) { b.XVMINDP(r[0], r[1], r[2]) },
+		"xvsqrtdp":  func(b *Builder, r []int) { b.XVSQRTDP(r[0], r[1]) },
+	}
+	for _, in := range gap.ArchOf("ppc64").Insns() {
+		emit, ok := ops[in.ISA]
+		if !ok {
+			t.Errorf("registry entry %s has no method", in.ISA)
+			continue
 		}
-		want := fmt.Sprintf("WORD $0x%08x // %s", g.want, g.op)
-		if s := b.Func().String(); !strings.Contains(s, want) {
-			t.Errorf("%s %v: emitted\n%s\nwant a line starting %q", g.op, r, s, want)
+		delete(ops, in.ISA)
+		for _, c := range in.Golden {
+			b := NewFunc("k", Layout(nil, nil, nil, nil), 0)
+			emit(b, c.Ops)
+			if s := b.Func().String(); !strings.Contains(s, "\t"+in.Word(c.Ops...)+"\n") {
+				t.Errorf("%s %v: emitted\n%s", in.ISA, c.Ops, s)
+			}
 		}
+	}
+	for isa := range ops {
+		t.Errorf("method for %s has no registry entry", isa)
 	}
 }
 

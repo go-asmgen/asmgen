@@ -1,0 +1,80 @@
+name: goasm-gaps
+
+# Watches the instructions go-asmgen encodes as WORDs because cmd/asm lacks
+# them (internal/gap): reports when a Go release or master gains one, and
+# checks that the patches in goasm-patches/ still apply to master and still
+# produce the reference encodings. Scheduled, because Go changes without any
+# push here.
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "internal/gap/**"
+      - "tools/goasmgap/**"
+      - "goasm-patches/**"
+      - ".github/workflows/goasm-gaps.yml"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  gaps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: Build goasmgap
+        run: go build -o "$RUNNER_TEMP/goasmgap" ./tools/goasmgap
+
+      - name: Verify against the latest release
+        run: |
+          "$RUNNER_TEMP/goasmgap" verify -goroot "$(go env GOROOT)" | tee "$RUNNER_TEMP/release.txt"
+          echo "release=$(go env GOVERSION)" >> "$GITHUB_ENV"
+
+      - name: Build Go master
+        run: |
+          git clone --depth 1 https://go.googlesource.com/go "$RUNNER_TEMP/gomaster"
+          cd "$RUNNER_TEMP/gomaster/src"
+          GOROOT_BOOTSTRAP="$(go env GOROOT)" ./make.bash
+          echo "master=$(cd .. && git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Scan and verify Go master
+        run: |
+          "$RUNNER_TEMP/goasmgap" scan -goroot "$RUNNER_TEMP/gomaster"
+          "$RUNNER_TEMP/goasmgap" verify -goroot "$RUNNER_TEMP/gomaster" | tee "$RUNNER_TEMP/master.txt"
+
+      - name: Open an issue when Go gains an instruction
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          news=$( { sed "s/^/$release: /" "$RUNNER_TEMP/release.txt"; sed "s/^/master@$master: /" "$RUNNER_TEMP/master.txt"; } | grep ': SUPPORTED' || true)
+          if [ -z "$news" ]; then echo "nothing new"; exit 0; fi
+          isas=$(echo "$news" | awk '{print $4}' | sort -u | tr '\n' ' ')
+          title="goasm gap closed upstream: ${isas% }"
+          if [ -n "$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[].number')" ]; then
+            echo "already reported: $title"; exit 0
+          fi
+          printf 'Go now assembles these registry entries for every reference case:\n\n```\n%s\n```\n\nThe matching methods can emit the mnemonic instead of a WORD (raising the go directive if only master or a new release has it), and the entry can leave internal/gap.\n' "$news" > "$RUNNER_TEMP/body.md"
+          gh issue create --title "$title" --body-file "$RUNNER_TEMP/body.md"
+
+      - name: Apply goasm-patches to master and verify them
+        run: |
+          shopt -s nullglob
+          patches=(goasm-patches/*.patch)
+          if [ ${#patches[@]} -eq 0 ]; then echo "no patches"; exit 0; fi
+          cd "$RUNNER_TEMP/gomaster"
+          git -c user.name=goasm-gaps -c user.email=goasm-gaps@localhost am "${patches[@]/#/$GITHUB_WORKSPACE/}"
+          GOTOOLCHAIN=local bin/go install cmd/asm
+          cd "$GITHUB_WORKSPACE"
+          for arch in $(printf '%s\n' "${patches[@]}" | sed 's#.*/##; s#-.*##' | sort -u); do
+            "$RUNNER_TEMP/goasmgap" verify -goroot "$RUNNER_TEMP/gomaster" -arch "$arch" -require
+          done

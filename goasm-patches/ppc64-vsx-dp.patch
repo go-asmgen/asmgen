@@ -1,0 +1,218 @@
+From f7ca78b21beee8b1d3cade09858bfdfff52f3760 Mon Sep 17 00:00:00 2001
+From: tannevaled <tannevaled@users.noreply.github.com>
+Date: Sun, 4 Oct 2026 19:02:18 +0200
+Subject: [PATCH] cmd/internal/obj/ppc64: add VSX vector double-precision
+ arithmetic
+
+Add the ISA 2.06 VSX vector float64 arithmetic instructions:
+
+	XVADDDP, XVSUBDP, XVMULDP, XVDIVDP, XVMADDADP, XVMAXDP, XVMINDP
+	(XX3-form) and XVSQRTDP (XX2-form).
+
+They follow the operand order of the existing VSX XX3/XX2 instructions
+(XXLAND, XXLANDC, XSMAXJDP, XVCVDPSP), which keep the ISA order with the
+target moved last:
+
+	XVSUBDP XA, XB, XT    // xvsubdp XT, XA, XB: XT = XA - XB
+	XVMADDADP XA, XB, XT  // xvmaddadp XT, XA, XB: XT = XA*XB + XT
+	XVSQRTDP XB, XT       // xvsqrtdp XT, XB
+
+This is the order golang.org/x/arch/ppc64/ppc64asm already prints for
+these instructions in Plan 9 syntax.
+
+These predate ISA 3.1, so they are not produced by ppc64map (which only
+emits ISA 3.1+ instructions into asm9_gtables.go) and are added to the
+hand-written tables, like XSMAXJDP.
+
+The test encodings were checked against GNU as 2.44 on POWER9 and
+llvm-objdump, including VS32-VS63 in each operand position.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/cmd/asm/internal/asm/testdata/ppc64.s | 75 +++++++++++++++++++++++
+ src/cmd/internal/obj/ppc64/a.out.go       |  8 +++
+ src/cmd/internal/obj/ppc64/anames.go      |  8 +++
+ src/cmd/internal/obj/ppc64/asm9.go        | 32 ++++++++++
+ 4 files changed, 123 insertions(+)
+
+diff --git a/src/cmd/asm/internal/asm/testdata/ppc64.s b/src/cmd/asm/internal/asm/testdata/ppc64.s
+index 8e9b8c47..11bfe08e 100644
+--- a/src/cmd/asm/internal/asm/testdata/ppc64.s
++++ b/src/cmd/asm/internal/asm/testdata/ppc64.s
+@@ -1200,4 +1200,79 @@ TEXT asmtest(SB),DUPOK|NOSPLIT,$0
+ 	XSMAXJDP VS1,VS2,VS3            // f0611480
+ 	XSMINJDP VS1,VS2,VS3            // f06114c0
+ 
++	// VSX vector double-precision arithmetic. Golden encodings from GNU as 2.44.
++	XVADDDP VS0, VS0, VS0           // f0000300
++	XVADDDP VS2, VS1, VS3           // f0620b00
++	XVADDDP VS0, VS0, VS63          // f3e00301
++	XVADDDP VS63, VS0, VS0          // f01f0304
++	XVADDDP VS0, VS63, VS0          // f000fb02
++	XVADDDP VS33, VS34, VS32        // f0011307
++	XVADDDP VS41, VS58, VS17        // f229d306
++	XVADDDP VS63, VS63, VS63        // f3fffb07
++	XVADDDP VS32, VS1, VS31         // f3e00b04
++	XVSUBDP VS0, VS0, VS0           // f0000340
++	XVSUBDP VS2, VS1, VS3           // f0620b40
++	XVSUBDP VS0, VS0, VS63          // f3e00341
++	XVSUBDP VS63, VS0, VS0          // f01f0344
++	XVSUBDP VS0, VS63, VS0          // f000fb42
++	XVSUBDP VS33, VS34, VS32        // f0011347
++	XVSUBDP VS41, VS58, VS17        // f229d346
++	XVSUBDP VS63, VS63, VS63        // f3fffb47
++	XVSUBDP VS32, VS1, VS31         // f3e00b44
++	XVMULDP VS0, VS0, VS0           // f0000380
++	XVMULDP VS2, VS1, VS3           // f0620b80
++	XVMULDP VS0, VS0, VS63          // f3e00381
++	XVMULDP VS63, VS0, VS0          // f01f0384
++	XVMULDP VS0, VS63, VS0          // f000fb82
++	XVMULDP VS33, VS34, VS32        // f0011387
++	XVMULDP VS41, VS58, VS17        // f229d386
++	XVMULDP VS63, VS63, VS63        // f3fffb87
++	XVMULDP VS32, VS1, VS31         // f3e00b84
++	XVDIVDP VS0, VS0, VS0           // f00003c0
++	XVDIVDP VS2, VS1, VS3           // f0620bc0
++	XVDIVDP VS0, VS0, VS63          // f3e003c1
++	XVDIVDP VS63, VS0, VS0          // f01f03c4
++	XVDIVDP VS0, VS63, VS0          // f000fbc2
++	XVDIVDP VS33, VS34, VS32        // f00113c7
++	XVDIVDP VS41, VS58, VS17        // f229d3c6
++	XVDIVDP VS63, VS63, VS63        // f3fffbc7
++	XVDIVDP VS32, VS1, VS31         // f3e00bc4
++	XVMADDADP VS0, VS0, VS0         // f0000308
++	XVMADDADP VS2, VS1, VS3         // f0620b08
++	XVMADDADP VS0, VS0, VS63        // f3e00309
++	XVMADDADP VS63, VS0, VS0        // f01f030c
++	XVMADDADP VS0, VS63, VS0        // f000fb0a
++	XVMADDADP VS33, VS34, VS32      // f001130f
++	XVMADDADP VS41, VS58, VS17      // f229d30e
++	XVMADDADP VS63, VS63, VS63      // f3fffb0f
++	XVMADDADP VS32, VS1, VS31       // f3e00b0c
++	XVMAXDP VS0, VS0, VS0           // f0000700
++	XVMAXDP VS2, VS1, VS3           // f0620f00
++	XVMAXDP VS0, VS0, VS63          // f3e00701
++	XVMAXDP VS63, VS0, VS0          // f01f0704
++	XVMAXDP VS0, VS63, VS0          // f000ff02
++	XVMAXDP VS33, VS34, VS32        // f0011707
++	XVMAXDP VS41, VS58, VS17        // f229d706
++	XVMAXDP VS63, VS63, VS63        // f3ffff07
++	XVMAXDP VS32, VS1, VS31         // f3e00f04
++	XVMINDP VS0, VS0, VS0           // f0000740
++	XVMINDP VS2, VS1, VS3           // f0620f40
++	XVMINDP VS0, VS0, VS63          // f3e00741
++	XVMINDP VS63, VS0, VS0          // f01f0744
++	XVMINDP VS0, VS63, VS0          // f000ff42
++	XVMINDP VS33, VS34, VS32        // f0011747
++	XVMINDP VS41, VS58, VS17        // f229d746
++	XVMINDP VS63, VS63, VS63        // f3ffff47
++	XVMINDP VS32, VS1, VS31         // f3e00f44
++	XVSQRTDP VS0, VS0               // f000032c
++	XVSQRTDP VS2, VS3               // f060132c
++	XVSQRTDP VS0, VS63              // f3e0032d
++	XVSQRTDP VS63, VS0              // f000fb2e
++	XVSQRTDP VS41, VS17             // f2204b2e
++	XVSQRTDP VS63, VS63             // f3e0fb2f
++	XVSQRTDP VS32, VS31             // f3e0032e
++	XVADDDP V1, V2, V3              // f0611307
++	XVMADDADP V1, V2, V3            // f061130f
++	XVSQRTDP V2, V3                 // f060132f
++
+ 	RET
+diff --git a/src/cmd/internal/obj/ppc64/a.out.go b/src/cmd/internal/obj/ppc64/a.out.go
+index d103ebcf..128fa5d2 100644
+--- a/src/cmd/internal/obj/ppc64/a.out.go
++++ b/src/cmd/internal/obj/ppc64/a.out.go
+@@ -1089,6 +1089,14 @@ const (
+ 	AXVCVUXWSP
+ 	AXSMAXJDP
+ 	AXSMINJDP
++	AXVADDDP
++	AXVSUBDP
++	AXVMULDP
++	AXVDIVDP
++	AXVMADDADP
++	AXVMAXDP
++	AXVMINDP
++	AXVSQRTDP
+ 	ALASTAOUT // The last instruction in this list. Also the first opcode generated by ppc64map.
+ 
+ 	// aliases
+diff --git a/src/cmd/internal/obj/ppc64/anames.go b/src/cmd/internal/obj/ppc64/anames.go
+index ebcdc95c..12cbbe9f 100644
+--- a/src/cmd/internal/obj/ppc64/anames.go
++++ b/src/cmd/internal/obj/ppc64/anames.go
+@@ -624,5 +624,13 @@ var Anames = []string{
+ 	"XVCVUXWSP",
+ 	"XSMAXJDP",
+ 	"XSMINJDP",
++	"XVADDDP",
++	"XVSUBDP",
++	"XVMULDP",
++	"XVDIVDP",
++	"XVMADDADP",
++	"XVMAXDP",
++	"XVMINDP",
++	"XVSQRTDP",
+ 	"LASTAOUT",
+ }
+diff --git a/src/cmd/internal/obj/ppc64/asm9.go b/src/cmd/internal/obj/ppc64/asm9.go
+index 06ad72ee..ee86ebb3 100644
+--- a/src/cmd/internal/obj/ppc64/asm9.go
++++ b/src/cmd/internal/obj/ppc64/asm9.go
+@@ -475,6 +475,10 @@ var optabBase = []Optab{
+ 	/* VSX vector integer-FP conversion */
+ 	{as: AXVCVSXDDP, a1: C_VSREG, a6: C_VSREG, type_: 89, size: 4}, /* vsx vector integer-fp conversion, xx2-form */
+ 
++	/* VSX vector double-precision arithmetic */
++	{as: AXVADDDP, a1: C_VSREG, a2: C_VSREG, a6: C_VSREG, type_: 90, size: 4}, /* vsx vector dp arithmetic, xx3-form */
++	{as: AXVSQRTDP, a1: C_VSREG, a6: C_VSREG, type_: 89, size: 4},             /* vsx vector dp square root, xx2-form */
++
+ 	{as: ACMP, a1: C_REG, a6: C_REG, type_: 70, size: 4},
+ 	{as: ACMP, a1: C_REG, a2: C_CREG, a6: C_REG, type_: 70, size: 4},
+ 	{as: ACMP, a1: C_REG, a6: C_S16CON, type_: 70, size: 4},
+@@ -1759,6 +1763,17 @@ func buildop(ctxt *obj.Link) {
+ 			opset(AXVCVUXDSP, r0)
+ 			opset(AXVCVUXWSP, r0)
+ 
++		case AXVADDDP: /* xvadddp, xvsubdp, xvmuldp, xvdivdp, xvmaddadp, xvmaxdp, xvmindp */
++			opset(AXVSUBDP, r0)
++			opset(AXVMULDP, r0)
++			opset(AXVDIVDP, r0)
++			opset(AXVMADDADP, r0)
++			opset(AXVMAXDP, r0)
++			opset(AXVMINDP, r0)
++
++		case AXVSQRTDP: /* xvsqrtdp */
++			opset(AXVSQRTDP, r0)
++
+ 		case AAND: /* logical op Rb,Rs,Ra; no literal */
+ 			opset(AANDN, r0)
+ 			opset(AANDNCC, r0)
+@@ -4965,6 +4980,23 @@ func (c *ctxt9) oprrr(a obj.As) uint32 {
+ 		return OPVXX2(60, 424, 0) /* xvcvuxdsp - v2.06 */
+ 	case AXVCVUXWSP:
+ 		return OPVXX2(60, 168, 0) /* xvcvuxwsp - v2.06 */
++
++	case AXVADDDP:
++		return OPVXX3(60, 96, 0) /* xvadddp - v2.06 */
++	case AXVSUBDP:
++		return OPVXX3(60, 104, 0) /* xvsubdp - v2.06 */
++	case AXVMULDP:
++		return OPVXX3(60, 112, 0) /* xvmuldp - v2.06 */
++	case AXVDIVDP:
++		return OPVXX3(60, 120, 0) /* xvdivdp - v2.06 */
++	case AXVMADDADP:
++		return OPVXX3(60, 97, 0) /* xvmaddadp - v2.06 */
++	case AXVMAXDP:
++		return OPVXX3(60, 224, 0) /* xvmaxdp - v2.06 */
++	case AXVMINDP:
++		return OPVXX3(60, 232, 0) /* xvmindp - v2.06 */
++	case AXVSQRTDP:
++		return OPVXX2(60, 203, 0) /* xvsqrtdp - v2.06 */
+ 	/* End of VSX instructions */
+ 
+ 	case AMADDHD:
+-- 
+2.54.0 (Apple Git-157)
+
