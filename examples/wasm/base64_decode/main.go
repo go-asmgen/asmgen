@@ -5,37 +5,37 @@
 //
 // Algorithm (a direct byte-level inverse of the encoder's Lemire dance):
 //
-//   1. Load 16 input chars.
-//   2. Convert each ASCII char to its 6-bit index via range-mask + sub:
-//        digit_mask  = ge_s(chars, '0') & le_s(chars, '9')
-//        upper_mask  = ge_s(chars, 'A') & le_s(chars, 'Z')
-//        lower_mask  = ge_s(chars, 'a') & le_s(chars, 'z')
-//        plus_mask   = eq(chars, '+')
-//        slash_mask  = eq(chars, '/')
-//        offset = (digit  & 252)   ; -4 mod 256 (chars 48..57 → 52..61)
-//               | (upper  &  65)   ; A..Z → 0..25
-//               | (lower  &  71)   ; a..z → 26..51
-//               | (plus   & 237)   ; -19 mod 256 (chars 43 → 62)
-//               | (slash  & 240)   ; -16 mod 256 (chars 47 → 63)
-//        idx = i8x16.sub(chars, offset)
-//      Invalid input chars end up as garbage indexes (no mask fires),
-//      so the caller is responsible for pre-validating input if needed.
-//   3. Pack four consecutive 6-bit indexes back into 3 output bytes:
-//        b0 = (i0 << 2) | (i1 >> 4)
-//        b1 = (i1 << 4) | (i2 >> 2)
-//        b2 = (i2 << 6) | i3
-//      SIMD-lane implementation:
-//        Precompute three shifted-left versions of idx (shl2, shl4, shl6)
-//        and two shifted-right versions (shr4, shr2). Then build the
-//        "left" and "right" halves with two shuffle merges each — the
-//        shuffles interleave sources by output position:
-//          left  pattern picks shl2[4g],  shl4[4g+1], shl6[4g+2]
-//          right pattern picks shr4[4g+1], shr2[4g+2], idx [4g+3]
-//        (idx serves as the "shr0" source since i8x16.shr_u by 0 is a
-//        no-op.) The 12 output positions for g = 0..3 fall at byte
-//        indices 0-2, 3-5, 6-8, 9-11; positions 12-15 hold junk that
-//        the caller overwrites on the next store or discards.
-//   4. result = left | right; v128.store.
+//  1. Load 16 input chars.
+//  2. Convert each ASCII char to its 6-bit index via range-mask + sub:
+//     digit_mask  = ge_s(chars, '0') & le_s(chars, '9')
+//     upper_mask  = ge_s(chars, 'A') & le_s(chars, 'Z')
+//     lower_mask  = ge_s(chars, 'a') & le_s(chars, 'z')
+//     plus_mask   = eq(chars, '+')
+//     slash_mask  = eq(chars, '/')
+//     offset = (digit  & 252)   ; -4 mod 256 (chars 48..57 → 52..61)
+//     | (upper  &  65)   ; A..Z → 0..25
+//     | (lower  &  71)   ; a..z → 26..51
+//     | (plus   & 237)   ; -19 mod 256 (chars 43 → 62)
+//     | (slash  & 240)   ; -16 mod 256 (chars 47 → 63)
+//     idx = i8x16.sub(chars, offset)
+//     Invalid input chars end up as garbage indexes (no mask fires),
+//     so the caller is responsible for pre-validating input if needed.
+//  3. Pack four consecutive 6-bit indexes back into 3 output bytes:
+//     b0 = (i0 << 2) | (i1 >> 4)
+//     b1 = (i1 << 4) | (i2 >> 2)
+//     b2 = (i2 << 6) | i3
+//     SIMD-lane implementation:
+//     Precompute three shifted-left versions of idx (shl2, shl4, shl6)
+//     and two shifted-right versions (shr4, shr2). Then build the
+//     "left" and "right" halves with two shuffle merges each — the
+//     shuffles interleave sources by output position:
+//     left  pattern picks shl2[4g],  shl4[4g+1], shl6[4g+2]
+//     right pattern picks shr4[4g+1], shr2[4g+2], idx [4g+3]
+//     (idx serves as the "shr0" source since i8x16.shr_u by 0 is a
+//     no-op.) The 12 output positions for g = 0..3 fall at byte
+//     indices 0-2, 3-5, 6-8, 9-11; positions 12-15 hold junk that
+//     the caller overwrites on the next store or discards.
+//  4. result = left | right; v128.store.
 //
 // Signature:
 //

@@ -3,8 +3,8 @@ package main
 import (
 	"bytes"
 	"errors"
-	"io"
 	"flag"
+	"io"
 	"os"
 	"strings"
 	"testing"

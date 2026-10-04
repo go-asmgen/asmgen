@@ -7,15 +7,15 @@
 // The technique is a two-step horizontal reduction that mirrors popcount
 // but at a coarser grain. For each 16-byte block:
 //
-//   1. AND the input with 0xc0 × 16 to isolate the top two bits of each
-//      byte, then compare against 0x80 × 16. UTF-8 continuation bytes
-//      have the exact 10xxxxxx pattern, so this compare produces 0xff
-//      exactly on the continuation lanes.
-//   2. i8x16.bitmask compresses those 16 per-lane truth bits into a
-//      scalar i32 (bits 0..15 set on continuation lanes).
-//   3. i32.popcnt on that i32 counts how many bytes in the block were
-//      continuations. The rune count is the number of non-continuation
-//      bytes: 16 - popcnt(mask). Accumulate across blocks.
+//  1. AND the input with 0xc0 × 16 to isolate the top two bits of each
+//     byte, then compare against 0x80 × 16. UTF-8 continuation bytes
+//     have the exact 10xxxxxx pattern, so this compare produces 0xff
+//     exactly on the continuation lanes.
+//  2. i8x16.bitmask compresses those 16 per-lane truth bits into a
+//     scalar i32 (bits 0..15 set on continuation lanes).
+//  3. i32.popcnt on that i32 counts how many bytes in the block were
+//     continuations. The rune count is the number of non-continuation
+//     bytes: 16 - popcnt(mask). Accumulate across blocks.
 //
 // This is exact for valid UTF-8 inputs — every rune has exactly one
 // non-continuation leader byte, so the count of leaders equals the

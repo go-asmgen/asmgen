@@ -229,11 +229,11 @@ func verifyPopcount(ctx context.Context, kern api.Module, mem api.Memory) error 
 	}
 	// Test inputs — each is a multiple of 16 bytes.
 	cases := [][]byte{
-		make([]byte, 16), // all zero
-		bytes16(0xff),    // all 0xff → 16*8 = 128 bits
-		bytes16(0x55),    // alternating 01010101 → 16*4 = 64 bits
-		bytesN(32, 0xff), // 32 bytes of 0xff → 256 bits
-		bytesRange(48),   // 48 bytes 0..47
+		make([]byte, 16),   // all zero
+		bytes16(0xff),      // all 0xff → 16*8 = 128 bits
+		bytes16(0x55),      // alternating 01010101 → 16*4 = 64 bits
+		bytesN(32, 0xff),   // 32 bytes of 0xff → 256 bits
+		bytesRange(48),     // 48 bytes 0..47
 		bytesN(1024, 0xa5), // 1024 bytes of 0xa5 → 1024*4 = 4096 bits
 	}
 	fail := 0
@@ -280,12 +280,12 @@ func verifyToupper(ctx context.Context, kern api.Module, mem api.Memory) error {
 		return fmt.Errorf("kernel does not export toupper")
 	}
 	cases := []string{
-		"aaaaaaaaaaaaaaaa",                 // 16B all lower → all upper
-		"AAAAAAAAAAAAAAAA",                 // 16B all upper → unchanged
-		"abcdefghijklmnop",                 // 16B mixed lower letters
-		"aBcDeFgHiJkLmNoP",                 // 16B mixed case
-		"0123456789!@#$%^",                 // 16B non-letter (unchanged)
-		"hello, world!!!!hello, world!!!!", // 32B two blocks
+		"aaaaaaaaaaaaaaaa",                  // 16B all lower → all upper
+		"AAAAAAAAAAAAAAAA",                  // 16B all upper → unchanged
+		"abcdefghijklmnop",                  // 16B mixed lower letters
+		"aBcDeFgHiJkLmNoP",                  // 16B mixed case
+		"0123456789!@#$%^",                  // 16B non-letter (unchanged)
+		"hello, world!!!!hello, world!!!!",  // 32B two blocks
 		"the quick brown fox jumps over th", // 32B (first block of 32 chars)
 	}
 	fail := 0
@@ -502,13 +502,13 @@ func verifyHexDecode(ctx context.Context, kern api.Module, mem api.Memory) error
 	// Each case: an even-length hex string of at least 16 chars, length
 	// a multiple of 16 so nBlocks = len/16 covers it fully.
 	cases := []string{
-		"0000000000000000",                                                     // 16 chars → 8 zero bytes
-		"0123456789abcdef",                                                     // 16 chars → 0x01,0x23,0x45,0x67,0x89,0xab,0xcd,0xef
-		"0123456789ABCDEF",                                                     // uppercase variant
-		"deadbeefcafebabe",                                                     // 16 chars → 8 bytes
-		"DEADBEEFCAFEBABE",                                                     // uppercase
-		"0123456789abcdef0123456789ABCDEF",                                     // 32 chars → 16 bytes (2 blocks)
-		"ffffffffffffffff00000000000000001111111111111111eeeeeeeeeeeeeeee",     // 64 chars → 32 bytes (4 blocks)
+		"0000000000000000",                 // 16 chars → 8 zero bytes
+		"0123456789abcdef",                 // 16 chars → 0x01,0x23,0x45,0x67,0x89,0xab,0xcd,0xef
+		"0123456789ABCDEF",                 // uppercase variant
+		"deadbeefcafebabe",                 // 16 chars → 8 bytes
+		"DEADBEEFCAFEBABE",                 // uppercase
+		"0123456789abcdef0123456789ABCDEF", // 32 chars → 16 bytes (2 blocks)
+		"ffffffffffffffff00000000000000001111111111111111eeeeeeeeeeeeeeee", // 64 chars → 32 bytes (4 blocks)
 	}
 	fail := 0
 	for i, hexIn := range cases {
@@ -975,14 +975,14 @@ func verifyBase64Decode(ctx context.Context, kern api.Module, mem api.Memory) er
 	// verifier round-trips through the reference encoder to produce
 	// input the reference decoder then reverses.
 	inputs := [][]byte{
-		bytes.Repeat([]byte{0x00}, 12),  // 12 zero bytes  → 16 'A's
-		bytes.Repeat([]byte{0xff}, 12),  // 12 x 0xff       → 16 '/'s
-		[]byte("Hello, worl!"),          // 12 bytes ASCII
-		bytesRange(12),                  // 0..11
-		bytesRange(24),                  // 0..23 (2 blocks)
-		bytesRange(48),                  // 0..47 (4 blocks)
-		mixedPattern(120),               // 10 blocks
-		mixedPattern(1200),              // 100 blocks
+		bytes.Repeat([]byte{0x00}, 12),            // 12 zero bytes  → 16 'A's
+		bytes.Repeat([]byte{0xff}, 12),            // 12 x 0xff       → 16 '/'s
+		[]byte("Hello, worl!"),                    // 12 bytes ASCII
+		bytesRange(12),                            // 0..11
+		bytesRange(24),                            // 0..23 (2 blocks)
+		bytesRange(48),                            // 0..47 (4 blocks)
+		mixedPattern(120),                         // 10 blocks
+		mixedPattern(1200),                        // 100 blocks
 		bytes.Repeat([]byte{0x3f, 0xff, 0x00}, 4), // triggers '+' and '/'
 	}
 	fail := 0
