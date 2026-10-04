@@ -10,7 +10,7 @@ package gap
 // XVSUBDP VS1, VS2, VS3 is VS3 = VS1 - VS2. Go's disassembler already prints
 // these instructions that way.
 
-const ppc64Source = "GNU as 2.44 (Debian, POWER9), read back with objdump"
+const ppc64Source = "GNU as 2.44 (Debian, POWER9), read back with objdump; llvm-mc 22.1.5 agrees on every case"
 
 func init() {
 	a := &Arch{Name: "ppc64", GOARCH: []string{"ppc64", "ppc64le"}, Testdata: "ppc64.s", BigEndianTestdata: true}

@@ -17,9 +17,10 @@ on:
       - "goasm-patches/**"
       - ".github/workflows/goasm-gaps.yml"
 
+# Least privilege: the job that builds Go master and applies patches holds a
+# read-only token; only the small report job may write issues.
 permissions:
   contents: read
-  issues: write
 
 jobs:
   gaps:
@@ -50,21 +51,16 @@ jobs:
         run: |
           "$RUNNER_TEMP/goasmgap" scan -goroot "$RUNNER_TEMP/gomaster"
           "$RUNNER_TEMP/goasmgap" verify -goroot "$RUNNER_TEMP/gomaster" | tee "$RUNNER_TEMP/master.txt"
+          printf 'release=%s\nmaster=%s\n' "$release" "$master" > "$RUNNER_TEMP/versions.txt"
 
-      - name: Open an issue when Go gains an instruction
-        if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          news=$( { sed "s/^/$release: /" "$RUNNER_TEMP/release.txt"; sed "s/^/master@$master: /" "$RUNNER_TEMP/master.txt"; } | grep ': SUPPORTED' || true)
-          if [ -z "$news" ]; then echo "nothing new"; exit 0; fi
-          isas=$(echo "$news" | awk '{print $4}' | sort -u | tr '\n' ' ')
-          title="goasm gap closed upstream: ${isas% }"
-          if [ -n "$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[].number')" ]; then
-            echo "already reported: $title"; exit 0
-          fi
-          printf 'Go now assembles these registry entries for every reference case:\n\n```\n%s\n```\n\nThe matching methods can emit the mnemonic instead of a WORD (raising the go directive if only master or a new release has it), and the entry can leave internal/gap.\n' "$news" > "$RUNNER_TEMP/body.md"
-          gh issue create --title "$title" --body-file "$RUNNER_TEMP/body.md"
+      - name: Keep the verdicts for the report job
+        uses: actions/upload-artifact@v7
+        with:
+          name: verdicts
+          path: |
+            ${{ runner.temp }}/release.txt
+            ${{ runner.temp }}/master.txt
+            ${{ runner.temp }}/versions.txt
 
       - name: Apply goasm-patches to master and verify them
         run: |
@@ -76,9 +72,51 @@ jobs:
           arches=$(printf '%s\n' "${patches[@]}" | sed 's#.*/##; s#-.*##' | sort -u)
           # Go's own tests: every line a patch adds to testdata, including
           # instructions and error cases go-asmgen holds no reference for.
-          GOTOOLCHAIN=local bin/go test cmd/asm/internal/asm $(for a in $arches; do echo "cmd/internal/obj/$a"; done)
+          pkgs=(cmd/asm/internal/asm)
+          for a in $arches; do pkgs+=("cmd/internal/obj/$a"); done
+          GOTOOLCHAIN=local bin/go test "${pkgs[@]}"
           cd "$GITHUB_WORKSPACE"
           # The independent references (verify builds cmd/asm from source).
           for arch in $arches; do
             "$RUNNER_TEMP/goasmgap" verify -goroot "$RUNNER_TEMP/gomaster" -arch "$arch" -require
           done
+
+  # Runs even when a patch no longer applies (the gaps job then fails after
+  # saving the verdicts): Go gaining an instruction is news either way.
+  report:
+    needs: gaps
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: verdicts
+          path: ${{ runner.temp }}
+
+      - name: Open an issue when Go gains an instruction
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          . "$RUNNER_TEMP/versions.txt"
+          news=$( { sed "s/^/$release: /" "$RUNNER_TEMP/release.txt"; sed "s/^/master@$master: /" "$RUNNER_TEMP/master.txt"; } | grep ': SUPPORTED' || true)
+          if [ -z "$news" ]; then echo "nothing new"; exit 0; fi
+          isas=$(echo "$news" | awk '{print $4}' | sort -u | tr '\n' ' ')
+          title="goasm gap closed upstream: ${isas% }"
+          if [ -n "$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[].number')" ]; then
+            echo "already reported: $title"; exit 0
+          fi
+          fence='```'
+          {
+            echo "Go now assembles these registry entries for every reference case:"
+            echo
+            echo "$fence"
+            echo "$news"
+            echo "$fence"
+            echo
+            echo "The matching methods can emit the mnemonic instead of a WORD (raising the go directive if only master or a new release has it), and the entry can leave internal/gap."
+          } > "$RUNNER_TEMP/body.md"
+          gh issue create --title "$title" --body-file "$RUNNER_TEMP/body.md"
+
