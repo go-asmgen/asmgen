@@ -197,10 +197,11 @@ For struct/slice/string parameters, build the layout with
 ## Validate locally (Go toolchain required)
 
 The library packages (`abi`, `emit`, `amd64`, `arm64`, `riscv64`, `loong64`,
-`ppc64`, `s390x`) are architecture-independent and held to 100% test coverage:
+`ppc64`, `s390x`, `wasm`) are architecture-independent and held to 100% test
+coverage:
 
 ```sh
-go test ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/...
+go test ./abi/... ./emit/... ./amd64/... ./arm64/... ./riscv64/... ./loong64/... ./ppc64/... ./s390x/... ./wasm/... ./internal/...
 ```
 
 The generated assembly is the real test of correctness. On an arm64 host (Apple
@@ -234,7 +235,9 @@ GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/riscv64/...
 3. **Runtime test** — the function is actually called and its result checked:
    natively on amd64 and arm64 runners, under qemu-user for riscv64, loong64,
    ppc64le and s390x.
-4. **100% library coverage** is gated on `abi`, `emit`, and the six builders.
+4. **100% library coverage** is gated on `abi`, `emit`, `internal/gap` and the seven builders.
+5. **govulncheck** finds no known vulnerability. [SECURITY.md](SECURITY.md)
+   says what counts as one in a code generator, and how to report it.
 
 ## Roadmap
 
