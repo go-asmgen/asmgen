@@ -1,35 +1,43 @@
 package loong64
 
 import (
-	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/go-asmgen/asmgen/internal/gap"
 )
 
-// lasxGolden (lasx_golden_test.go) covers every register field at 0 and 31
-// and mixes in between, and the broadcast-load offset at 0, ±8, 2040 and
-// -2048 (the ends of its scaled signed 9-bit field).
-
-func TestLASXEncodings(t *testing.T) {
-	for _, g := range lasxGolden {
-		b := NewFunc("k", Layout(nil, nil, nil, nil), 0)
-		a := g.args
-		switch g.op {
-		case "xvfmadd.d":
-			b.XVFMADDD(a[0], a[1], a[2], a[3])
-		case "vfmadd.d":
-			b.VFMADDD(a[0], a[1], a[2], a[3])
-		case "xvldrepl.d":
-			b.XVLDREPLD(a[0], a[1], a[2])
-		case "vldrepl.d":
-			b.VLDREPLD(a[0], a[1], a[2])
-		default:
-			t.Fatalf("golden has an op with no encoder: %s", g.op)
+// The encodings are tested against their references in internal/gap; this
+// checks what each method emits: the mnemonic where cmd/asm has one, the
+// registry's WORD where it does not.
+func TestLASXEmits(t *testing.T) {
+	ops := map[string]func(*Builder, []int){
+		"xvfmadd.d":  func(b *Builder, a []int) { b.XVFMADDD(a[0], a[1], a[2], a[3]) },
+		"vfmadd.d":   func(b *Builder, a []int) { b.VFMADDD(a[0], a[1], a[2], a[3]) },
+		"xvldrepl.d": func(b *Builder, a []int) { b.XVLDREPLD(a[0], a[1], a[2]) },
+		"vldrepl.d":  func(b *Builder, a []int) { b.VLDREPLD(a[0], a[1], a[2]) },
+	}
+	for _, in := range gap.ArchOf("loong64").Insns() {
+		emit, ok := ops[in.ISA]
+		if !ok {
+			t.Errorf("registry entry %s has no method", in.ISA)
+			continue
 		}
-		want := fmt.Sprintf("WORD $0x%08x // %s", g.want, g.op)
-		if s := b.Func().String(); !strings.Contains(s, want) {
-			t.Errorf("%s %v: emitted\n%s\nwant a line starting %q", g.op, a, s, want)
+		delete(ops, in.ISA)
+		for _, c := range in.Golden {
+			want := in.Word(c.Ops...)
+			if strings.Contains(in.ISA, "ldrepl") && c.Ops[2] != -2048 {
+				want = in.Syntax(c.Ops...)
+			}
+			b := NewFunc("k", Layout(nil, nil, nil, nil), 0)
+			emit(b, c.Ops)
+			if s := b.Func().String(); !strings.Contains(s, "\t"+want+"\n") {
+				t.Errorf("%s %v: emitted\n%s\nwant %q", in.ISA, c.Ops, s, want)
+			}
 		}
+	}
+	for isa := range ops {
+		t.Errorf("method for %s has no registry entry", isa)
 	}
 }
 

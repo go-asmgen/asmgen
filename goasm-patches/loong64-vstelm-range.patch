@@ -1,0 +1,144 @@
+From 838460544bb831e2293dd63391e8b0b130e060e9 Mon Sep 17 00:00:00 2001
+From: tannevaled <tannevaled@users.noreply.github.com>
+Date: Sun, 4 Oct 2026 20:50:03 +0200
+Subject: [PATCH] cmd/internal/obj/loong64: range-check vstelm offsets
+
+The element stores VMOVQ Vd.<T>[index], off(Rj) and
+XVMOVQ Xd.<T>[index], off(Rj) assemble to [x]vstelm.{b,h,w,d},
+whose offset is a signed 8-bit field in units of the element size:
+si8, si8<<1, si8<<2 or si8<<3. The optab matches any C_SOREG_12
+offset, and the encoder checked the alignment but masked the scaled
+offset to 8 bits without checking its range, so an offset out of
+range was silently wrapped. For example
+
+	VMOVQ	V1.V[0], 1024(R4)
+
+assembled to 0x31120081, which is vstelm.d $vr1, $r4, -1024, 0:
+a store to the wrong address, with no error.
+
+Refuse offsets outside [-128, 127], [-256, 254], [-512, 508] and
+[-1024, 1016] for .b, .h, .w and .d. The lane index was already
+checked.
+
+The minimum and maximum offset of each element size, for both VMOVQ
+and XVMOVQ, are added to loong64enc1.s with encodings checked
+against llvm-mc (LLVM 22.1.5, --triple=loongarch64 -mattr=+lasx).
+loong64error.s covers an offset one element past either end of each
+range, and misalignment.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../asm/internal/asm/testdata/loong64enc1.s   | 16 ++++++++++++++
+ .../asm/internal/asm/testdata/loong64error.s  | 22 +++++++++++++++++++
+ src/cmd/internal/obj/loong64/asm.go           | 17 ++++++++++++++
+ 3 files changed, 55 insertions(+)
+
+diff --git a/src/cmd/asm/internal/asm/testdata/loong64enc1.s b/src/cmd/asm/internal/asm/testdata/loong64enc1.s
+index 1eee4279..8e7467ec 100644
+--- a/src/cmd/asm/internal/asm/testdata/loong64enc1.s
++++ b/src/cmd/asm/internal/asm/testdata/loong64enc1.s
+@@ -617,6 +617,22 @@ lable2:
+ 	XVMOVQ		X5.H[2], 2(R4)	// 85044833
+ 	XVMOVQ		X5.W[1], 4(R4)	// 85042433
+ 	XVMOVQ		X5.V[0], 8(R4)	// 85041033
++	VMOVQ		V5.B[3], -128(R4)	// 85008e31
++	VMOVQ		V5.B[3], 127(R4)	// 85fc8d31
++	VMOVQ		V5.H[2], -256(R4)	// 85004a31
++	VMOVQ		V5.H[2], 254(R4)	// 85fc4931
++	VMOVQ		V5.W[1], -512(R4)	// 85002631
++	VMOVQ		V5.W[1], 508(R4)	// 85fc2531
++	VMOVQ		V5.V[0], -1024(R4)	// 85001231
++	VMOVQ		V5.V[0], 1016(R4)	// 85fc1131
++	XVMOVQ		X5.B[3], -128(R4)	// 85008e33
++	XVMOVQ		X5.B[3], 127(R4)	// 85fc8d33
++	XVMOVQ		X5.H[2], -256(R4)	// 85004a33
++	XVMOVQ		X5.H[2], 254(R4)	// 85fc4933
++	XVMOVQ		X5.W[1], -512(R4)	// 85002633
++	XVMOVQ		X5.W[1], 508(R4)	// 85fc2533
++	XVMOVQ		X5.V[0], -1024(R4)	// 85001233
++	XVMOVQ		X5.V[0], 1016(R4)	// 85fc1133
+ 
+ 	// VSEQ{B,H,W,V}, XVSEQ{B,H,W,V} instruction
+ 	VSEQB		V1, V2, V3      // 43040070
+diff --git a/src/cmd/asm/internal/asm/testdata/loong64error.s b/src/cmd/asm/internal/asm/testdata/loong64error.s
+index 25ef3a85..194478d8 100644
+--- a/src/cmd/asm/internal/asm/testdata/loong64error.s
++++ b/src/cmd/asm/internal/asm/testdata/loong64error.s
+@@ -5,6 +5,28 @@
+ TEXT errors(SB),$0
+ 	VSHUF4IV	$16, V1, V2	// ERROR "operand out of range 0 to 15"
+ 	XVSHUF4IV	$16, X1, X2	// ERROR "operand out of range 0 to 15"
++	VMOVQ		V1.B[0], 128(R4)	// ERROR "offset out of range [-128, 127]"
++	VMOVQ		V1.B[0], -129(R4)	// ERROR "offset out of range [-128, 127]"
++	VMOVQ		V1.H[0], 256(R4)	// ERROR "offset out of range [-256, 254]"
++	VMOVQ		V1.H[0], -258(R4)	// ERROR "offset out of range [-256, 254]"
++	VMOVQ		V1.W[0], 512(R4)	// ERROR "offset out of range [-512, 508]"
++	VMOVQ		V1.W[0], -516(R4)	// ERROR "offset out of range [-512, 508]"
++	VMOVQ		V1.V[0], 1024(R4)	// ERROR "offset out of range [-1024, 1016]"
++	VMOVQ		V1.V[0], -1032(R4)	// ERROR "offset out of range [-1024, 1016]"
++	XVMOVQ		X1.B[0], 128(R4)	// ERROR "offset out of range [-128, 127]"
++	XVMOVQ		X1.B[0], -129(R4)	// ERROR "offset out of range [-128, 127]"
++	XVMOVQ		X1.H[0], 256(R4)	// ERROR "offset out of range [-256, 254]"
++	XVMOVQ		X1.H[0], -258(R4)	// ERROR "offset out of range [-256, 254]"
++	XVMOVQ		X1.W[0], 512(R4)	// ERROR "offset out of range [-512, 508]"
++	XVMOVQ		X1.W[0], -516(R4)	// ERROR "offset out of range [-512, 508]"
++	XVMOVQ		X1.V[0], 1024(R4)	// ERROR "offset out of range [-1024, 1016]"
++	XVMOVQ		X1.V[0], -1032(R4)	// ERROR "offset out of range [-1024, 1016]"
++	VMOVQ		V1.H[0], 3(R4)		// ERROR "offset must be a multiple of 2."
++	VMOVQ		V1.W[0], 6(R4)		// ERROR "offset must be a multiple of 4."
++	VMOVQ		V1.V[0], 12(R4)		// ERROR "offset must be a multiple of 8."
++	XVMOVQ		X1.H[0], -3(R4)		// ERROR "offset must be a multiple of 2."
++	XVMOVQ		X1.W[0], -6(R4)		// ERROR "offset must be a multiple of 4."
++	XVMOVQ		X1.V[0], -12(R4)	// ERROR "offset must be a multiple of 8."
+ 	ADDV16		$1, R4, R5	// ERROR "the constant must be a multiple of 65536."
+ 	ADDV16		$65535, R4, R5	// ERROR "the constant must be a multiple of 65536."
+ 	SC		R4, 1(R5)	// ERROR "offset must be a multiple of 4."
+diff --git a/src/cmd/internal/obj/loong64/asm.go b/src/cmd/internal/obj/loong64/asm.go
+index 532da165..599b1658 100644
+--- a/src/cmd/internal/obj/loong64/asm.go
++++ b/src/cmd/internal/obj/loong64/asm.go
+@@ -2792,24 +2792,41 @@ func (c *ctxt0) asmout(p *obj.Prog, o *Optab, out []uint32) {
+ 		index := uint32(p.From.Index)
+ 		c.checkindex(p, index, m)
+ 
++		// The offset is a signed 8-bit field in units of the element
++		// size, si8<<shift, so the byte offset is a multiple of the
++		// element size in [-128<<shift, 127<<shift]. C_SOREG_12 is much
++		// wider, and the field is masked to 8 bits when encoding, so an
++		// offset outside that range must be refused here.
+ 		si := c.regoff(&p.To)
+ 		switch v & 0x00F00000 {
+ 		case 0x00100000: // [x]vstelm.d
+ 			if si&7 != 0 {
+ 				c.ctxt.Diag("%v: offset must be a multiple of 8.\n", p)
+ 			}
++			if si < -1024 || si > 1016 {
++				c.ctxt.Diag("%v: offset out of range [-1024, 1016].\n", p)
++			}
+ 			o1 = OP_5IIRR(v, index, uint32(si>>3)&0xff, rj, vd)
+ 		case 0x00200000: // [x]vstelm.w
+ 			if si&3 != 0 {
+ 				c.ctxt.Diag("%v: offset must be a multiple of 4.\n", p)
+ 			}
++			if si < -512 || si > 508 {
++				c.ctxt.Diag("%v: offset out of range [-512, 508].\n", p)
++			}
+ 			o1 = OP_5IIRR(v, index, uint32(si>>2)&0xff, rj, vd)
+ 		case 0x00400000: // [x]vstelm.h
+ 			if si&1 != 0 {
+ 				c.ctxt.Diag("%v: offset must be a multiple of 2.\n", p)
+ 			}
++			if si < -256 || si > 254 {
++				c.ctxt.Diag("%v: offset out of range [-256, 254].\n", p)
++			}
+ 			o1 = OP_5IIRR(v, index, uint32(si>>1)&0xff, rj, vd)
+ 		case 0x00800000: // [x]vstelm.b
++			if si < -128 || si > 127 {
++				c.ctxt.Diag("%v: offset out of range [-128, 127].\n", p)
++			}
+ 			o1 = OP_5IIRR(v, index, uint32(si)&0xff, rj, vd)
+ 		}
+ 
+-- 
+2.54.0 (Apple Git-157)
+
