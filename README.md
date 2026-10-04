@@ -119,6 +119,17 @@ example kernels in `examples/simd/ppc64` were run on POWER8 and POWER9 against
 Go's arithmetic, `math.Sqrt` and `math.FMA`: bit-identical. (`XVMAXDP`/`XVMINDP`
 follow the ISA's NaN rule, not Go's NaN-propagating `max`.)
 
+**loong64 LSX/LASX float64 instructions the Go assembler lacks**: `cmd/asm`
+has the vector float64 add/sub/mul/div (`VADDD`, `XVMULD`, …) but no fused
+multiply-add and no broadcast load. `Builder.XVFMADDD`/`VFMADDD` (fused,
+four/two lanes) and `XVLDREPLD`/`VLDREPLD` (load one float64 into every lane)
+encode them as `WORD`s. The encodings are pinned against GNU as 2.43 on a
+Loongson 3C5000L (32 cases, register fields at 0 and 31, offsets at the ends
+of the field), and the example kernels in `examples/simd/loong64` were run on
+that machine against `math.FMA`: bit-identical. *Transitional*: Go 1.27.1 and
+master have no mnemonic for these (`VMADDV`/`XVMADDV` are the integer
+multiply-adds); when cmd/asm gains one, these methods will emit it instead.
+
 A typed vector-load helper (to drop the `Raw` boilerplate) and first-class vector
 *types* are the main remaining items.
 

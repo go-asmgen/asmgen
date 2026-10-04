@@ -24,3 +24,37 @@ TEXT ·addI32x8(SB), NOSPLIT, $0-24
 	XVMOVQ X2, (R6)
 	RET
 
+TEXT ·fmaF64x4(SB), NOSPLIT, $0-32
+	MOVV a+0(FP), R4
+	MOVV b+8(FP), R5
+	MOVV c+16(FP), R6
+	MOVV out+24(FP), R7
+	XVMOVQ (R4), X0
+	XVMOVQ (R5), X1
+	XVMOVQ (R6), X2
+	WORD $0x0a210403 // xvfmadd.d $xr3, $xr0, $xr1, $xr2
+	XVMOVQ X3, (R7)
+	RET
+
+TEXT ·fmaF64x2(SB), NOSPLIT, $0-32
+	MOVV a+0(FP), R4
+	MOVV b+8(FP), R5
+	MOVV c+16(FP), R6
+	MOVV out+24(FP), R7
+	VMOVQ (R4), V0
+	VMOVQ (R5), V1
+	VMOVQ (R6), V2
+	WORD $0x09210403 // vfmadd.d $vr3, $vr0, $vr1, $vr2
+	VMOVQ V3, (R7)
+	RET
+
+TEXT ·bcastF64(SB), NOSPLIT, $0-24
+	MOVV p+0(FP), R4
+	MOVV out4+8(FP), R5
+	MOVV out2+16(FP), R6
+	WORD $0x32100c80 // xvldrepl.d $xr0, $r4, 24
+	WORD $0x30100481 // vldrepl.d $vr1, $r4, 8
+	XVMOVQ X0, (R5)
+	VMOVQ V1, (R6)
+	RET
+
