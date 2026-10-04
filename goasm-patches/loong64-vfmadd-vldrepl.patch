@@ -1,0 +1,356 @@
+From 0108e4e34b1bf2bdb1b6917db95f4ddd6a160a76 Mon Sep 17 00:00:00 2001
+From: tannevaled <tannevaled@users.noreply.github.com>
+Date: Sun, 4 Oct 2026 20:00:42 +0200
+Subject: [PATCH] cmd/internal/obj/loong64: add vector FMA, accept -2048 in
+ vldrepl loads
+
+Add the LSX and LASX floating-point fused multiply-add family:
+
+	VFMADDD	Va, Vk, Vj, Vd	// vfmadd.d  vd, vj, vk, va
+	XVFMADDD	Xa, Xk, Xj, Xd	// xvfmadd.d xd, xj, xk, xa
+
+and likewise VFMSUB, VFNMADD, VFNMSUB, with F for .s and D for .d,
+16 instructions in all. The operands are in the order of the scalar
+FMADDD Fa, Fk, Fj, Fd, and the instructions share the VSHUFB/XVSHUFB
+four-register optab entries.
+
+The [X]vldrepl.{b,h,w,d} broadcast loads (VMOVQ off(Rj), Vd.<T> and
+XVMOVQ off(Rj), Xd.<T>) take a signed 12-bit byte offset, stored in
+units of the element size: si12, si11<<1, si10<<2, si9<<3. Every
+element size reaches -2048, but the optab matched only C_SOREG_12,
+and BIG_12 is 2046, so C_SOREG_12 holds [-2046, 2045]. -2048 was
+classified as C_SOREG_16 and refused as an illegal combination for
+all four element sizes, and so were the top of the .b range (2046,
+2047) and of the .h range (2046). Match C_SOREG_16 instead and check
+the range and alignment for each element size when encoding.
+
+All new encodings were checked against llvm-mc (LLVM 22.1.5,
+--triple=loongarch64 -mattr=+lasx): 74 new lines in loong64enc1.s,
+including the minimum and maximum offset of each element size for
+both VMOVQ and XVMOVQ, and every register field at 0 and 31 for
+VFMADDD and XVFMADDD. 12 new lines in loong64error.s cover offsets
+one element past either end, and misalignment.
+
+An independent check, go-asmgen's gap checker (goasmgap verify -require),
+assembles the reference cases it holds for vfmadd.d, xvfmadd.d,
+vldrepl.d and xvldrepl.d, produced by GNU as 2.43 on a Loongson
+3C5000L, and finds 32 of 32 identical; before this change it reported
+VFMADDD and XVFMADDD absent and the two .d loads at 7/8, refusing
+-2048. llvm-mc agrees with GNU as on all 32.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../asm/internal/asm/testdata/loong64enc1.s   | 76 +++++++++++++++++++
+ .../asm/internal/asm/testdata/loong64error.s  | 12 +++
+ src/cmd/internal/obj/loong64/anames.go        | 16 ++++
+ src/cmd/internal/obj/loong64/asm.go           | 51 ++++++++++---
+ src/cmd/internal/obj/loong64/inst.go          | 18 +++++
+ src/cmd/internal/obj/loong64/instOp.go        | 16 ++++
+ 6 files changed, 178 insertions(+), 11 deletions(-)
+
+diff --git a/src/cmd/asm/internal/asm/testdata/loong64enc1.s b/src/cmd/asm/internal/asm/testdata/loong64enc1.s
+index 1eee4279..d4ff2e0a 100644
+--- a/src/cmd/asm/internal/asm/testdata/loong64enc1.s
++++ b/src/cmd/asm/internal/asm/testdata/loong64enc1.s
+@@ -607,6 +607,36 @@ lable2:
+ 	XVMOVQ		(R4), X3.V4	// 83001032
+ 	XVMOVQ		24(R4), X3.V4	// 830c1032
+ 	XVMOVQ		-24(R4), X3.V4	// 83f41732
++	VMOVQ		(R4), V0.V2	// 80001030
++	VMOVQ		8(R4), V4.V2	// 84041030
++	VMOVQ		(R4), V31.V2	// 9f001030
++	VMOVQ		(R31), V0.V2	// e0031030
++	VMOVQ		2040(R12), V7.V2	// 87fd1330
++	VMOVQ		-2048(R5), V9.V2	// a9001430
++	VMOVQ		-8(R6), V3.V2	// c3fc1730
++	VMOVQ		2040(R31), V31.V2	// ffff1330
++	VMOVQ		-2048(R5), V9.B16	// a900a030
++	VMOVQ		2047(R5), V9.B16	// a9fc9f30
++	VMOVQ		-2048(R5), V9.H8	// a9005030
++	VMOVQ		2046(R5), V9.H8	// a9fc4f30
++	VMOVQ		-2048(R5), V9.W4	// a9002830
++	VMOVQ		2044(R5), V9.W4	// a9fc2730
++	VMOVQ		2040(R5), V9.V2	// a9fc1330
++	XVMOVQ		(R4), X0.V4	// 80001032
++	XVMOVQ		8(R4), X4.V4	// 84041032
++	XVMOVQ		(R4), X31.V4	// 9f001032
++	XVMOVQ		(R31), X0.V4	// e0031032
++	XVMOVQ		2040(R12), X7.V4	// 87fd1332
++	XVMOVQ		-2048(R5), X9.V4	// a9001432
++	XVMOVQ		-8(R6), X3.V4	// c3fc1732
++	XVMOVQ		2040(R31), X31.V4	// ffff1332
++	XVMOVQ		-2048(R5), X9.B32	// a900a032
++	XVMOVQ		2047(R5), X9.B32	// a9fc9f32
++	XVMOVQ		-2048(R5), X9.H16	// a9005032
++	XVMOVQ		2046(R5), X9.H16	// a9fc4f32
++	XVMOVQ		-2048(R5), X9.W8	// a9002832
++	XVMOVQ		2044(R5), X9.W8	// a9fc2732
++	XVMOVQ		2040(R5), X9.V4	// a9fc1332
+ 
+ 	// Store the byte/halfword/word/doubleword element selected by immediate index from vector register vd/xd into memory.
+ 	VMOVQ		V5.B[3], 1(R4)	// 85048c31
+@@ -1441,6 +1471,52 @@ lable2:
+ 	VBITSELV	V1, V2, V3, V4	// 6488100d
+ 	XVBITSELV	X1, X2, X3, X4	// 6488200d
+ 
++	// [X]VF{MADD,MSUB,NMADD,NMSUB}{F,D} instructions
++	VFMADDF		V4, V1, V2, V3	// 43041209
++	VFMADDF		V31, V31, V31, V31	// ffff1f09
++	VFMADDD		V0, V0, V0, V0	// 00002009
++	VFMADDD		V4, V1, V2, V3	// 43042209
++	VFMADDD		V0, V0, V0, V31	// 1f002009
++	VFMADDD		V0, V0, V31, V0	// e0032009
++	VFMADDD		V0, V31, V0, V0	// 007c2009
++	VFMADDD		V31, V0, V0, V0	// 00802f09
++	VFMADDD		V5, V26, V9, V17	// 31e92209
++	VFMADDD		V31, V31, V31, V31	// ffff2f09
++	VFMSUBF		V4, V1, V2, V3	// 43045209
++	VFMSUBF		V31, V31, V31, V31	// ffff5f09
++	VFMSUBD		V4, V1, V2, V3	// 43046209
++	VFMSUBD		V31, V31, V31, V31	// ffff6f09
++	VFNMADDF	V4, V1, V2, V3	// 43049209
++	VFNMADDF	V31, V31, V31, V31	// ffff9f09
++	VFNMADDD	V4, V1, V2, V3	// 4304a209
++	VFNMADDD	V31, V31, V31, V31	// ffffaf09
++	VFNMSUBF	V4, V1, V2, V3	// 4304d209
++	VFNMSUBF	V31, V31, V31, V31	// ffffdf09
++	VFNMSUBD	V4, V1, V2, V3	// 4304e209
++	VFNMSUBD	V31, V31, V31, V31	// ffffef09
++	XVFMADDF	X4, X1, X2, X3	// 4304120a
++	XVFMADDF	X31, X31, X31, X31	// ffff1f0a
++	XVFMADDD	X0, X0, X0, X0	// 0000200a
++	XVFMADDD	X4, X1, X2, X3	// 4304220a
++	XVFMADDD	X0, X0, X0, X31	// 1f00200a
++	XVFMADDD	X0, X0, X31, X0	// e003200a
++	XVFMADDD	X0, X31, X0, X0	// 007c200a
++	XVFMADDD	X31, X0, X0, X0	// 00802f0a
++	XVFMADDD	X5, X26, X9, X17	// 31e9220a
++	XVFMADDD	X31, X31, X31, X31	// ffff2f0a
++	XVFMSUBF	X4, X1, X2, X3	// 4304520a
++	XVFMSUBF	X31, X31, X31, X31	// ffff5f0a
++	XVFMSUBD	X4, X1, X2, X3	// 4304620a
++	XVFMSUBD	X31, X31, X31, X31	// ffff6f0a
++	XVFNMADDF	X4, X1, X2, X3	// 4304920a
++	XVFNMADDF	X31, X31, X31, X31	// ffff9f0a
++	XVFNMADDD	X4, X1, X2, X3	// 4304a20a
++	XVFNMADDD	X31, X31, X31, X31	// ffffaf0a
++	XVFNMSUBF	X4, X1, X2, X3	// 4304d20a
++	XVFNMSUBF	X31, X31, X31, X31	// ffffdf0a
++	XVFNMSUBD	X4, X1, X2, X3	// 4304e20a
++	XVFNMSUBD	X31, X31, X31, X31	// ffffef0a
++
+ 	// [X]{VBITSELB} instructions
+ 	VBITSELB	$255, V2, V1	// 41fcc773
+ 	XVBITSELB	$0, X2, X1	// 4100c477
+diff --git a/src/cmd/asm/internal/asm/testdata/loong64error.s b/src/cmd/asm/internal/asm/testdata/loong64error.s
+index 25ef3a85..c80ae2de 100644
+--- a/src/cmd/asm/internal/asm/testdata/loong64error.s
++++ b/src/cmd/asm/internal/asm/testdata/loong64error.s
+@@ -13,3 +13,15 @@ TEXT errors(SB),$0
+ 	LL		1(R5), R4	// ERROR "offset must be a multiple of 4."
+ 	LLW		1(R5), R4	// ERROR "offset must be a multiple of 4."
+ 	LLV		1(R5), R4	// ERROR "offset must be a multiple of 4."
++	VMOVQ		2048(R4), V0.B16	// ERROR "offset out of range [-2048, 2047]"
++	VMOVQ		-2049(R4), V0.B16	// ERROR "offset out of range [-2048, 2047]"
++	VMOVQ		2048(R4), V0.H8		// ERROR "offset out of range [-2048, 2046]"
++	VMOVQ		-2050(R4), V0.H8	// ERROR "offset out of range [-2048, 2046]"
++	VMOVQ		2048(R4), V0.W4		// ERROR "offset out of range [-2048, 2044]"
++	VMOVQ		-2052(R4), V0.W4	// ERROR "offset out of range [-2048, 2044]"
++	VMOVQ		2048(R4), V0.V2		// ERROR "offset out of range [-2048, 2040]"
++	VMOVQ		-2056(R4), V0.V2	// ERROR "offset out of range [-2048, 2040]"
++	XVMOVQ		2048(R4), X0.B32	// ERROR "offset out of range [-2048, 2047]"
++	XVMOVQ		-2056(R4), X0.V4	// ERROR "offset out of range [-2048, 2040]"
++	VMOVQ		-2047(R4), V0.H8	// ERROR "offset must be a multiple of 2."
++	XVMOVQ		-2044(R4), X0.V4	// ERROR "offset must be a multiple of 8."
+diff --git a/src/cmd/internal/obj/loong64/anames.go b/src/cmd/internal/obj/loong64/anames.go
+index 1380852a..999c5736 100644
+--- a/src/cmd/internal/obj/loong64/anames.go
++++ b/src/cmd/internal/obj/loong64/anames.go
+@@ -562,6 +562,22 @@ var Anames = []string{
+ 	"VFCLASSD",
+ 	"XVFCLASSF",
+ 	"XVFCLASSD",
++	"VFMADDF",
++	"VFMADDD",
++	"VFMSUBF",
++	"VFMSUBD",
++	"VFNMADDF",
++	"VFNMADDD",
++	"VFNMSUBF",
++	"VFNMSUBD",
++	"XVFMADDF",
++	"XVFMADDD",
++	"XVFMSUBF",
++	"XVFMSUBD",
++	"XVFNMADDF",
++	"XVFNMADDD",
++	"XVFNMSUBF",
++	"XVFNMSUBD",
+ 	"VFRINTRNEF",
+ 	"VFRINTRNED",
+ 	"VFRINTRZF",
+diff --git a/src/cmd/internal/obj/loong64/asm.go b/src/cmd/internal/obj/loong64/asm.go
+index 532da165..1aee278c 100644
+--- a/src/cmd/internal/obj/loong64/asm.go
++++ b/src/cmd/internal/obj/loong64/asm.go
+@@ -247,7 +247,7 @@ var optab = []Optab{
+ 	{AVMOVQ, C_SOREG_12, C_NONE, C_NONE, C_VREG, C_NONE, 8, 4, REGZERO, 0},
+ 	{AVMOVQ, C_VREG, C_NONE, C_NONE, C_ROFF, C_NONE, 20, 4, 0, 0},
+ 	{AVMOVQ, C_ROFF, C_NONE, C_NONE, C_VREG, C_NONE, 21, 4, 0, 0},
+-	{AVMOVQ, C_SOREG_12, C_NONE, C_NONE, C_ARNG, C_NONE, 42, 4, 0, 0}, // vldrepl.{b/h/w/d}
++	{AVMOVQ, C_SOREG_16, C_NONE, C_NONE, C_ARNG, C_NONE, 42, 4, 0, 0}, // vldrepl.{b/h/w/d}
+ 	{AVMOVQ, C_ELEM, C_NONE, C_NONE, C_SOREG_12, C_NONE, 43, 4, 0, 0}, // vstelm.{b/h/w/d}
+ 	// moving data between registers
+ 	{AVMOVQ, C_VREG, C_NONE, C_NONE, C_VREG, C_NONE, 1, 4, 0, 0},
+@@ -263,7 +263,7 @@ var optab = []Optab{
+ 	{AXVMOVQ, C_SAUTO, C_NONE, C_NONE, C_XREG, C_NONE, 8, 4, REGSP, 0},
+ 	{AXVMOVQ, C_XREG, C_NONE, C_NONE, C_ROFF, C_NONE, 20, 4, 0, 0},
+ 	{AXVMOVQ, C_ROFF, C_NONE, C_NONE, C_XREG, C_NONE, 21, 4, 0, 0},
+-	{AXVMOVQ, C_SOREG_12, C_NONE, C_NONE, C_ARNG, C_NONE, 42, 4, 0, 0}, // xvldrepl.{b/h/w/d}
++	{AXVMOVQ, C_SOREG_16, C_NONE, C_NONE, C_ARNG, C_NONE, 42, 4, 0, 0}, // xvldrepl.{b/h/w/d}
+ 	{AXVMOVQ, C_ELEM, C_NONE, C_NONE, C_SOREG_12, C_NONE, 43, 4, 0, 0}, // xvstelm.{b/h/w/d}
+ 	// moving data between registers
+ 	{AXVMOVQ, C_XREG, C_NONE, C_NONE, C_XREG, C_NONE, 1, 4, 0, 0},
+@@ -1508,9 +1508,25 @@ func buildop(ctxt *obj.Link) {
+ 
+ 		case AVSHUFB:
+ 			opset(AVBITSELV, r0)
++			opset(AVFMADDF, r0)
++			opset(AVFMADDD, r0)
++			opset(AVFMSUBF, r0)
++			opset(AVFMSUBD, r0)
++			opset(AVFNMADDF, r0)
++			opset(AVFNMADDD, r0)
++			opset(AVFNMSUBF, r0)
++			opset(AVFNMSUBD, r0)
+ 
+ 		case AXVSHUFB:
+ 			opset(AXVBITSELV, r0)
++			opset(AXVFMADDF, r0)
++			opset(AXVFMADDD, r0)
++			opset(AXVFMSUBF, r0)
++			opset(AXVFMSUBD, r0)
++			opset(AXVFNMADDF, r0)
++			opset(AXVFNMADDD, r0)
++			opset(AXVFNMSUBF, r0)
++			opset(AXVFNMSUBD, r0)
+ 
+ 		case AMOVW,
+ 			AMOVV,
+@@ -2755,28 +2771,28 @@ func (c *ctxt0) asmout(p *obj.Prog, o *Optab, out []uint32) {
+ 			c.ctxt.Diag("illegal arng type combination: %v\n", p)
+ 		}
+ 
++		// The offset is a signed 12-bit byte offset, encoded in units of
++		// the element size: si12, si11<<1, si10<<2 or si9<<3. Every
++		// element size reaches -2048, which C_SOREG_12 (BIG_12 = 2046)
++		// does not include, so the operand is matched as C_SOREG_16 and
++		// its range is checked here.
+ 		si := c.regoff(&p.From)
+ 		Rj := uint32(p.From.Reg & EXT_REG_MASK)
+ 		Vd := uint32(p.To.Reg & EXT_REG_MASK)
+ 		switch v & 0xc00000 {
+ 		case 0x800000: // [x]vldrepl.b
++			c.checkldreploff(p, si, 0)
+ 			o1 = OP_12IRR(v, uint32(si), Rj, Vd)
+ 		case 0x400000: // [x]vldrepl.h
+-			if si&1 != 0 {
+-				c.ctxt.Diag("%v: offset must be a multiple of 2.\n", p)
+-			}
++			c.checkldreploff(p, si, 1)
+ 			o1 = OP_11IRR(v, uint32(si>>1), Rj, Vd)
+ 		case 0x0:
+ 			switch v & 0x300000 {
+ 			case 0x200000: // [x]vldrepl.w
+-				if si&3 != 0 {
+-					c.ctxt.Diag("%v: offset must be a multiple of 4.\n", p)
+-				}
++				c.checkldreploff(p, si, 2)
+ 				o1 = OP_10IRR(v, uint32(si>>2), Rj, Vd)
+ 			case 0x100000: // [x]vldrepl.d
+-				if si&7 != 0 {
+-					c.ctxt.Diag("%v: offset must be a multiple of 8.\n", p)
+-				}
++				c.checkldreploff(p, si, 3)
+ 				o1 = OP_9IRR(v, uint32(si>>3), Rj, Vd)
+ 			}
+ 		}
+@@ -3265,6 +3281,19 @@ func (c *ctxt0) checkoperand(p *obj.Prog, operand uint32, mask uint32) {
+ 	}
+ }
+ 
++// checkldreploff checks the offset of a [x]vldrepl.{b/h/w/d} load whose
++// elements are 1<<shift bytes: a multiple of the element size in
++// [-2048, 2048 - element size].
++func (c *ctxt0) checkldreploff(p *obj.Prog, offset int32, shift uint) {
++	size := int32(1) << shift
++	if offset&(size-1) != 0 {
++		c.ctxt.Diag("%v: offset must be a multiple of %d.\n", p, size)
++	}
++	if offset < -2048 || offset > 2048-size {
++		c.ctxt.Diag("%v: offset out of range [-2048, %d].\n", p, 2048-size)
++	}
++}
++
+ // checkindex checks if index >= 0 && index <= maxindex
+ func (c *ctxt0) checkindex(p *obj.Prog, index uint32, mask uint32) {
+ 	if (index & ^mask) != 0 {
+diff --git a/src/cmd/internal/obj/loong64/inst.go b/src/cmd/internal/obj/loong64/inst.go
+index be5c7fe2..0eab1673 100644
+--- a/src/cmd/internal/obj/loong64/inst.go
++++ b/src/cmd/internal/obj/loong64/inst.go
+@@ -673,6 +673,24 @@ const (
+ 	AXVFCLASSF
+ 	AXVFCLASSD
+ 
++	// LSX and LASX floating point fused multiply-add instructions
++	AVFMADDF
++	AVFMADDD
++	AVFMSUBF
++	AVFMSUBD
++	AVFNMADDF
++	AVFNMADDD
++	AVFNMSUBF
++	AVFNMSUBD
++	AXVFMADDF
++	AXVFMADDD
++	AXVFMSUBF
++	AXVFMSUBD
++	AXVFNMADDF
++	AXVFNMADDD
++	AXVFNMSUBF
++	AXVFNMSUBD
++
+ 	// LSX and LASX floating point conversion instructions
+ 	AVFRINTRNEF
+ 	AVFRINTRNED
+diff --git a/src/cmd/internal/obj/loong64/instOp.go b/src/cmd/internal/obj/loong64/instOp.go
+index be15b6e7..25178b70 100644
+--- a/src/cmd/internal/obj/loong64/instOp.go
++++ b/src/cmd/internal/obj/loong64/instOp.go
+@@ -21,6 +21,22 @@ var oprrrr = map[obj.As]uint32{
+ 	AXVSHUFB:   0xd6 << 20, // xvshuf.b
+ 	AVBITSELV:  0xd1 << 20, // vbitsel.v
+ 	AXVBITSELV: 0xd2 << 20, // xvbitsel.v
++	AVFMADDF:   0x91 << 20, // vfmadd.s
++	AVFMADDD:   0x92 << 20, // vfmadd.d
++	AVFMSUBF:   0x95 << 20, // vfmsub.s
++	AVFMSUBD:   0x96 << 20, // vfmsub.d
++	AVFNMADDF:  0x99 << 20, // vfnmadd.s
++	AVFNMADDD:  0x9a << 20, // vfnmadd.d
++	AVFNMSUBF:  0x9d << 20, // vfnmsub.s
++	AVFNMSUBD:  0x9e << 20, // vfnmsub.d
++	AXVFMADDF:  0xa1 << 20, // xvfmadd.s
++	AXVFMADDD:  0xa2 << 20, // xvfmadd.d
++	AXVFMSUBF:  0xa5 << 20, // xvfmsub.s
++	AXVFMSUBD:  0xa6 << 20, // xvfmsub.d
++	AXVFNMADDF: 0xa9 << 20, // xvfnmadd.s
++	AXVFNMADDD: 0xaa << 20, // xvfnmadd.d
++	AXVFNMSUBF: 0xad << 20, // xvfnmsub.s
++	AXVFNMSUBD: 0xae << 20, // xvfnmsub.d
+ }
+ 
+ var oprrr = map[obj.As]uint32{
+-- 
+2.54.0 (Apple Git-157)
+

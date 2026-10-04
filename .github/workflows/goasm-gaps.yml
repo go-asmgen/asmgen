@@ -73,8 +73,12 @@ jobs:
           if [ ${#patches[@]} -eq 0 ]; then echo "no patches"; exit 0; fi
           cd "$RUNNER_TEMP/gomaster"
           git -c user.name=goasm-gaps -c user.email=goasm-gaps@localhost am "${patches[@]/#/$GITHUB_WORKSPACE/}"
-          GOTOOLCHAIN=local bin/go install cmd/asm
+          arches=$(printf '%s\n' "${patches[@]}" | sed 's#.*/##; s#-.*##' | sort -u)
+          # Go's own tests: every line a patch adds to testdata, including
+          # instructions and error cases go-asmgen holds no reference for.
+          GOTOOLCHAIN=local bin/go test cmd/asm/internal/asm $(for a in $arches; do echo "cmd/internal/obj/$a"; done)
           cd "$GITHUB_WORKSPACE"
-          for arch in $(printf '%s\n' "${patches[@]}" | sed 's#.*/##; s#-.*##' | sort -u); do
+          # The independent references (verify builds cmd/asm from source).
+          for arch in $arches; do
             "$RUNNER_TEMP/goasmgap" verify -goroot "$RUNNER_TEMP/gomaster" -arch "$arch" -require
           done

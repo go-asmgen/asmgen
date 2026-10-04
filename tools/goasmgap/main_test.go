@@ -151,7 +151,7 @@ func TestTestdataLayout(t *testing.T) {
 	}
 	b.Reset()
 	testdata(&b, gap.ArchOf("loong64"))
-	if !strings.Contains(b.String(), "\tVFMADDD V4, V1, V2, V3          // 43042209\n") {
+	if !strings.Contains(b.String(), "\tVFMADDD\t\tV4, V1, V2, V3\t// 43042209\n") {
 		t.Errorf("loong64 layout:\n%.300s", b.String())
 	}
 }
@@ -239,7 +239,12 @@ func TestVerifyWithTheRealToolchain(t *testing.T) {
 	if !strings.Contains(out, "vldrepl.d") {
 		t.Errorf("no verdict for vldrepl.d:\n%s", out)
 	}
-	if _, err := (toolchain{runtime.GOROOT()}).assemble("loong64", []string{"NOTANINSN V1"}); err == nil ||
+	tc, cleanup, err := newToolchain(runtime.GOROOT())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if _, err := tc.assemble("loong64", []string{"NOTANINSN V1"}); err == nil ||
 		strings.Contains(err.Error(), "k.s:") {
 		t.Errorf("refusal should be reported without the temporary file name: %v", err)
 	}

@@ -28,6 +28,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,7 +74,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 			}
 			return 0
 		}
-		ok, err := verify(stdout, toolchain{*goroot}, arches, *require)
+		tc, cleanup, err := newToolchain(*goroot)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		defer cleanup()
+		ok, err := verify(stdout, tc, arches, *require)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -98,13 +105,13 @@ func selectArches(name string) ([]*gap.Arch, error) {
 }
 
 // testdata writes the lines a cmd/asm patch adds to the family's test file,
-// in that file's layout: the instruction padded to 32 columns, then its
-// encoding.
+// in that file's layout.
 func testdata(w io.Writer, a *gap.Arch) {
-	fmt.Fprintf(w, "// %s: add to src/cmd/asm/internal/asm/testdata/%s\n", a.Name, a.Testdata)
+	fmt.Fprintf(w, "// %s: add to src/cmd/asm/internal/asm/testdata/%s, next to the\n", a.Name, a.Testdata)
+	fmt.Fprintf(w, "// lines of the nearest instruction family (scan shows where Go has kin).\n")
 	for _, in := range a.Insns() {
 		for _, c := range in.Golden {
-			fmt.Fprintf(w, "\t%-32s// %s\n", in.Syntax(c.Ops...), a.Hex(c.Want))
+			fmt.Fprintln(w, a.TestdataLine(in, c))
 		}
 	}
 }
@@ -170,12 +177,45 @@ func scanFile(path string, a *gap.Arch, hits map[*gap.Insn][]string) error {
 	return sc.Err()
 }
 
-// toolchain runs one Go tree's assembler.
-type toolchain struct{ goroot string }
+// toolchain runs one Go tree's assembler, built from that tree's source:
+// the cmd/asm installed under pkg/tool may predate the source (a patch
+// applied but not reinstalled, or one reverted), and verify must judge the
+// source.
+type toolchain struct {
+	goroot string
+	bin    string // asm and objdump, freshly built
+}
 
-func (tc toolchain) gocmd(goarch string, args ...string) ([]byte, error) {
-	cmd := exec.Command(filepath.Join(tc.goroot, "bin", "go"), args...)
-	cmd.Env = append(os.Environ(), "GOROOT="+tc.goroot, "GOTOOLCHAIN=local", "GOOS=linux", "GOARCH="+goarch)
+func newToolchain(goroot string) (toolchain, func(), error) {
+	bin, err := os.MkdirTemp("", "goasmgap-bin")
+	if err != nil {
+		return toolchain{}, nil, err
+	}
+	tc := toolchain{goroot: goroot, bin: bin}
+	cleanup := func() { os.RemoveAll(bin) }
+	for _, tool := range []string{"asm", "objdump"} {
+		out, err := tc.run("", filepath.Join(tc.goroot, "bin", "go"), "build", "-o", filepath.Join(bin, tool+exeSuffix()), "cmd/"+tool)
+		if err != nil {
+			cleanup()
+			return toolchain{}, nil, fmt.Errorf("verify: building cmd/%s from %s: %s", tool, goroot, firstLine(out, err))
+		}
+	}
+	return tc, cleanup, nil
+}
+
+func exeSuffix() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
+}
+
+func (tc toolchain) run(goarch, name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Env = append(os.Environ(), "GOROOT="+tc.goroot, "GOTOOLCHAIN=local")
+	if goarch != "" {
+		cmd.Env = append(cmd.Env, "GOOS=linux", "GOARCH="+goarch)
+	}
 	return cmd.CombinedOutput()
 }
 
@@ -197,10 +237,10 @@ func (tc toolchain) assemble(goarch string, lines []string) ([]uint32, error) {
 		return nil, err
 	}
 	inc := filepath.Join(tc.goroot, "pkg", "include")
-	if out, err := tc.gocmd(goarch, "tool", "asm", "-p", "k", "-I", inc, "-o", o, s); err != nil {
+	if out, err := tc.run(goarch, filepath.Join(tc.bin, "asm"+exeSuffix()), "-p", "k", "-I", inc, "-o", o, s); err != nil {
 		return nil, fmt.Errorf("%s", firstLine(out, err))
 	}
-	out, err := tc.gocmd(goarch, "tool", "objdump", o)
+	out, err := tc.run(goarch, filepath.Join(tc.bin, "objdump"+exeSuffix()), o)
 	if err != nil {
 		return nil, fmt.Errorf("objdump: %s", firstLine(out, err))
 	}

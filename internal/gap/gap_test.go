@@ -56,6 +56,22 @@ func TestSyntaxAndWord(t *testing.T) {
 	}
 }
 
+func TestTestdataLine(t *testing.T) {
+	be, le := ArchOf("ppc64"), ArchOf("loong64")
+	if got := be.TestdataLine(Lookup("ppc64", "xvadddp"), Case{[]int{3, 2, 1}, 0xf0620b00}); got != "\tXVADDDP VS2, VS1, VS3           // f0620b00" {
+		t.Errorf("ppc64: %q", got)
+	}
+	if got := le.TestdataLine(Lookup("loong64", "vldrepl.d"), Case{[]int{0, 4, 0}, 0x30100080}); got != "\tVMOVQ\t\t(R4), V0.V2\t// 80001030" {
+		t.Errorf("loong64: %q", got)
+	}
+	if got := le.TestdataLine(Lookup("loong64", "xvfmadd.d"), Case{[]int{3, 2, 1, 4}, 0x0a220443}); got != "\tXVFMADDD\tX4, X1, X2, X3\t// 4304220a" {
+		t.Errorf("loong64, 8-letter mnemonic: %q", got)
+	}
+	if got := le.TestdataLine(Lookup("loong64", "vldrepl.d"), Case{[]int{0, 4, 2040}, 0}); got != "\tVMOVQ\t\t2040(R4), V0.V2\t// 00000000" {
+		t.Errorf("a non-zero offset was rewritten: %q", got)
+	}
+}
+
 func TestArches(t *testing.T) {
 	if len(Arches()) != 2 || ArchOf("ppc64") == nil || ArchOf("loong64") == nil || ArchOf("mips") != nil {
 		t.Fatalf("Arches = %v", Arches())

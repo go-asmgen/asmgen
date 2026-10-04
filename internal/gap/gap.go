@@ -13,6 +13,7 @@ package gap
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -98,6 +99,10 @@ type Arch struct {
 	// in hex (ppc64, whose tests assemble big-endian) or as its bytes in
 	// little-endian order (loong64).
 	BigEndianTestdata bool
+	// TabbedTestdata says the file tabs the operands to column 16
+	// (loong64enc1.s), rather than padding the instruction to 32 columns
+	// (ppc64.s).
+	TabbedTestdata bool
 
 	insns []*Insn
 }
@@ -124,6 +129,24 @@ func (a *Arch) Hex(w uint32) string {
 	}
 	return fmt.Sprintf("%02x%02x%02x%02x", byte(w), byte(w>>8), byte(w>>16), byte(w>>24))
 }
+
+// TestdataLine writes one reference case the way the family's test file
+// does, including its habit of writing a zero offset as (R4), not 0(R4).
+func (a *Arch) TestdataLine(in *Insn, c Case) string {
+	insn := zeroOffset.ReplaceAllString(in.Syntax(c.Ops...), "$1(")
+	if !a.TabbedTestdata {
+		return fmt.Sprintf("\t%-32s// %s", insn, a.Hex(c.Want))
+	}
+	// Operands start at column 16, with tabs every 8 columns.
+	mnemonic, operands, _ := strings.Cut(insn, " ")
+	tabs := "\t"
+	if len(mnemonic) < 8 {
+		tabs = "\t\t"
+	}
+	return fmt.Sprintf("\t%s%s%s\t// %s", mnemonic, tabs, operands, a.Hex(c.Want))
+}
+
+var zeroOffset = regexp.MustCompile(`(^|[ ,])0\(`)
 
 // ParseHex reads an encoding written by Hex.
 func (a *Arch) ParseHex(s string) (uint32, error) {
