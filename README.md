@@ -96,7 +96,10 @@ AVX2 on a kernel that does not save YMM state. `POPCNT`, `FMA` (CPUID leaf 1,
 separate from AVX2's leaf-7 bit) and `AVX512F` are
 there too (`AVX512F` also requires the OS to save opmask and ZMM state, XCR0
 mask 0xE6; on macOS it answers false, since Darwin enables that state lazily),
-and the list stops at what has callers.
+and the list stops at what has callers. `amd64.VendorProbe(name, "GenuineIntel")`
+(v0.12.0) compares CPUID leaf 0's vendor string, for tuning choices measured to
+differ by vendor (go-fft's radix rule); it never gates correctness, since a
+hypervisor may report its own vendor.
 
 **arm64 vector float64 arithmetic the Go assembler lacks**: `cmd/asm` has the
 fused `VFMLA`/`VFMLS` but no vector `FADD`, `FSUB`, `FMUL` or `FNEG` for
