@@ -32,9 +32,9 @@ func main() {
 	xor.LoadArg("a", "R3").
 		LoadArg("b", "R4").
 		LoadArg("out", "R5").
-		Raw("LXVD2X (R3)(R0), VS32"). // load 16 bytes of a into V0 (=VS32)
-		Raw("LXVD2X (R4)(R0), VS33"). // load 16 bytes of b into V1 (=VS33)
-		Raw("VXOR V0, V1, V2").       // V2 = V0 ^ V1
+		Raw("LXVD2X (R3)(R0), VS32").  // load 16 bytes of a into V0 (=VS32)
+		Raw("LXVD2X (R4)(R0), VS33").  // load 16 bytes of b into V1 (=VS33)
+		Raw("VXOR V0, V1, V2").        // V2 = V0 ^ V1
 		Raw("STXVD2X VS34, (R5)(R0)"). // store V2 (=VS34) to out
 		Ret()
 	f.Add(xor.Func())
@@ -50,12 +50,47 @@ func main() {
 	eq.LoadArg("a", "R3").
 		LoadArg("b", "R4").
 		LoadArg("out", "R5").
-		Raw("LXVD2X (R3)(R0), VS32"). // V0 = a
-		Raw("LXVD2X (R4)(R0), VS33"). // V1 = b
+		Raw("LXVD2X (R3)(R0), VS32").  // V0 = a
+		Raw("LXVD2X (R4)(R0), VS33").  // V1 = b
 		Raw("VCMPEQUB V0, V1, V2").    // per-byte equality mask in V2
 		Raw("STXVD2X VS34, (R5)(R0)"). // store V2 to out
 		Ret()
 	f.Add(eq.Func())
+
+	// Two-lane float64 kernels through the VSX encoders (vsx.go): Go's
+	// assembler has the loads and stores but no vector double arithmetic.
+	// LXVD2X/STXVD2X swap the two doublewords on little-endian, and they swap
+	// them back, so a lane-wise operation sees each element in the same lane
+	// in every operand. Operands go to VS0..VS2 (= F0..F2's VSX registers).
+	bin := func(name string, op func(b *ppc64.Builder)) {
+		b := ppc64.NewFunc(name, ppc64.Layout(
+			[]string{"a", "b", "out"}, []ppc64.Type{ppc64.Ptr, ppc64.Ptr, ppc64.Ptr}, nil, nil), 0)
+		b.LoadArg("a", "R3").LoadArg("b", "R4").LoadArg("out", "R5").
+			Raw("LXVD2X (R3)(R0), VS0").
+			Raw("LXVD2X (R4)(R0), VS1")
+		op(b)
+		b.Raw("STXVD2X VS2, (R5)(R0)").Ret()
+		f.Add(b.Func())
+	}
+	bin("vadd2", func(b *ppc64.Builder) { b.XVADDDP(2, 0, 1) })
+	bin("vsub2", func(b *ppc64.Builder) { b.XVSUBDP(2, 0, 1) })
+	bin("vmul2", func(b *ppc64.Builder) { b.XVMULDP(2, 0, 1) })
+	bin("vdiv2", func(b *ppc64.Builder) { b.XVDIVDP(2, 0, 1) })
+	bin("vmax2", func(b *ppc64.Builder) { b.XVMAXDP(2, 0, 1) })
+	bin("vmin2", func(b *ppc64.Builder) { b.XVMINDP(2, 0, 1) })
+	bin("vsqrt2", func(b *ppc64.Builder) { b.XVSQRTDP(2, 1) }) // out = sqrt(b)
+
+	// vfma2: out = a*b + c, fused, with c loaded into the accumulator VS2.
+	fma := ppc64.NewFunc("vfma2", ppc64.Layout(
+		[]string{"a", "b", "c", "out"}, []ppc64.Type{ppc64.Ptr, ppc64.Ptr, ppc64.Ptr, ppc64.Ptr}, nil, nil), 0)
+	fma.LoadArg("a", "R3").LoadArg("b", "R4").LoadArg("c", "R5").LoadArg("out", "R6").
+		Raw("LXVD2X (R3)(R0), VS0").
+		Raw("LXVD2X (R4)(R0), VS1").
+		Raw("LXVD2X (R5)(R0), VS2").
+		XVMADDADP(2, 0, 1).
+		Raw("STXVD2X VS2, (R6)(R0)").
+		Ret()
+	f.Add(fma.Func())
 
 	if err := os.WriteFile("simd_ppc64le.s", []byte(f.String()), 0o644); err != nil {
 		fmt.Fprintln(os.Stderr, err)

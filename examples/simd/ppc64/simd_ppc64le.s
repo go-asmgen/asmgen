@@ -24,3 +24,85 @@ TEXT ·eq16(SB), NOSPLIT, $0-24
 	STXVD2X VS34, (R5)(R0)
 	RET
 
+TEXT ·vadd2(SB), NOSPLIT, $0-24
+	MOVD a+0(FP), R3
+	MOVD b+8(FP), R4
+	MOVD out+16(FP), R5
+	LXVD2X (R3)(R0), VS0
+	LXVD2X (R4)(R0), VS1
+	WORD $0xf0400b00 // xvadddp vs2, vs0, vs1
+	STXVD2X VS2, (R5)(R0)
+	RET
+
+TEXT ·vsub2(SB), NOSPLIT, $0-24
+	MOVD a+0(FP), R3
+	MOVD b+8(FP), R4
+	MOVD out+16(FP), R5
+	LXVD2X (R3)(R0), VS0
+	LXVD2X (R4)(R0), VS1
+	WORD $0xf0400b40 // xvsubdp vs2, vs0, vs1
+	STXVD2X VS2, (R5)(R0)
+	RET
+
+TEXT ·vmul2(SB), NOSPLIT, $0-24
+	MOVD a+0(FP), R3
+	MOVD b+8(FP), R4
+	MOVD out+16(FP), R5
+	LXVD2X (R3)(R0), VS0
+	LXVD2X (R4)(R0), VS1
+	WORD $0xf0400b80 // xvmuldp vs2, vs0, vs1
+	STXVD2X VS2, (R5)(R0)
+	RET
+
+TEXT ·vdiv2(SB), NOSPLIT, $0-24
+	MOVD a+0(FP), R3
+	MOVD b+8(FP), R4
+	MOVD out+16(FP), R5
+	LXVD2X (R3)(R0), VS0
+	LXVD2X (R4)(R0), VS1
+	WORD $0xf0400bc0 // xvdivdp vs2, vs0, vs1
+	STXVD2X VS2, (R5)(R0)
+	RET
+
+TEXT ·vmax2(SB), NOSPLIT, $0-24
+	MOVD a+0(FP), R3
+	MOVD b+8(FP), R4
+	MOVD out+16(FP), R5
+	LXVD2X (R3)(R0), VS0
+	LXVD2X (R4)(R0), VS1
+	WORD $0xf0400f00 // xvmaxdp vs2, vs0, vs1
+	STXVD2X VS2, (R5)(R0)
+	RET
+
+TEXT ·vmin2(SB), NOSPLIT, $0-24
+	MOVD a+0(FP), R3
+	MOVD b+8(FP), R4
+	MOVD out+16(FP), R5
+	LXVD2X (R3)(R0), VS0
+	LXVD2X (R4)(R0), VS1
+	WORD $0xf0400f40 // xvmindp vs2, vs0, vs1
+	STXVD2X VS2, (R5)(R0)
+	RET
+
+TEXT ·vsqrt2(SB), NOSPLIT, $0-24
+	MOVD a+0(FP), R3
+	MOVD b+8(FP), R4
+	MOVD out+16(FP), R5
+	LXVD2X (R3)(R0), VS0
+	LXVD2X (R4)(R0), VS1
+	WORD $0xf0400b2c // xvsqrtdp vs2, vs1
+	STXVD2X VS2, (R5)(R0)
+	RET
+
+TEXT ·vfma2(SB), NOSPLIT, $0-32
+	MOVD a+0(FP), R3
+	MOVD b+8(FP), R4
+	MOVD c+16(FP), R5
+	MOVD out+24(FP), R6
+	LXVD2X (R3)(R0), VS0
+	LXVD2X (R4)(R0), VS1
+	LXVD2X (R5)(R0), VS2
+	WORD $0xf0400b08 // xvmaddadp vs2, vs0, vs1
+	STXVD2X VS2, (R6)(R0)
+	RET
+
