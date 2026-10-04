@@ -13,13 +13,7 @@ Each patch is a `git format-patch` against Go master, named
 |---|---|---|
 | `ppc64-vsx-dp.patch` | `XVADDDP` `XVSUBDP` `XVMULDP` `XVDIVDP` `XVMADDADP` `XVMAXDP` `XVMINDP` `XVSQRTDP` | ready, not yet mailed |
 | `loong64-vfmadd-vldrepl.patch` | `VFMADDD` `XVFMADDD` and their 14 siblings (`VF[N]M{ADD,SUB}{F,D}`, V and X); `VMOVQ`/`XVMOVQ` broadcast loads at the ends of every element size's offset range (−2048 was refused for all, as were 2046–2047 for `.B` and 2046 for `.H`) | ready, not yet mailed |
-
-Found while writing these patches: on Go master (go1.28-devel, 2026-10-04), the
-loong64 element store `VMOVQ Vd.T[i], off(Rj)` (vstelm) masks its scaled offset
-with `&0xff` and has no range check. `VMOVQ V1.V[0], 1024(R4)` assembles without
-error to `0x31120081`, which is a store to −1024; llvm-mc refuses that offset
-(range [−1024, 1016]). Go 1.27 does not have these stores yet. go-asmgen does
-not emit them either. A separate patch for this is being prepared.
+| `loong64-vstelm-range.patch` | A range check for the element stores `VMOVQ Vd.T[i], off(Rj)` / `XVMOVQ` (vstelm). On Go master (go1.28-devel, 2026-10-04), an out-of-range offset was masked with `&0xff` and **silently** stored elsewhere: `VMOVQ V1.V[0], 1024(R4)` became a store to −1024. Now refused with "offset out of range". go-asmgen does not use these stores; it found the bug while writing the patch above. Go 1.27 does not have them. | ready, not yet mailed |
 
 ## From a registry entry to a CL
 
