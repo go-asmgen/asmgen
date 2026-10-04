@@ -126,7 +126,9 @@ four/two lanes) and `XVLDREPLD`/`VLDREPLD` (load one float64 into every lane)
 encode them as `WORD`s. The encodings are pinned against GNU as 2.43 on a
 Loongson 3C5000L (32 cases, register fields at 0 and 31, offsets at the ends
 of the field), and the example kernels in `examples/simd/loong64` were run on
-that machine against `math.FMA`: bit-identical.
+that machine against `math.FMA`: bit-identical. *Transitional*: Go 1.27.1 and
+master have no mnemonic for these (`VMADDV`/`XVMADDV` are the integer
+multiply-adds); when cmd/asm gains one, these methods will emit it instead.
 
 A typed vector-load helper (to drop the `Raw` boilerplate) and first-class vector
 *types* are the main remaining items.

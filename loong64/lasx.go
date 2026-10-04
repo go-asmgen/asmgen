@@ -13,6 +13,14 @@ import "fmt"
 // comment. Vector registers are 0–31 (V/X share the numbering; F0–F31 are the
 // low 64 bits). The encodings are checked against GNU as 2.43 on a Loongson
 // 3C5000L (TestLASXEncodings).
+//
+// TRANSITIONAL. go-asmgen's rule is to emit Plan 9 mnemonics and let cmd/asm
+// encode them; a WORD is the exception for an instruction cmd/asm cannot
+// name. As of Go 1.27.1 and master (2026-10-04), the loong64 assembler has no
+// vector float FMA (its VMADDV/XVMADDV are the integer multiply-adds) and no
+// broadcast load (no VLDREPL/XVLDREPL), and no open CL adds them. When it
+// gains them, these methods should emit the mnemonic instead, and the golden
+// test stays as the check that the two agree.
 
 // XVFMADDD emits xvfmadd.d: X[d] = X[j] × X[k] + X[a], four float64 lanes,
 // fused (one rounding).
