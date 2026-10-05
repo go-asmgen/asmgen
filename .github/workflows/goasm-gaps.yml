@@ -64,14 +64,43 @@ jobs:
             ${{ runner.temp }}/master.txt
             ${{ runner.temp }}/versions.txt
 
-      - name: Apply goasm-patches to master and verify them
+      - name: Follow the mailed Go CLs
+        # A mailed CL is forgotten the same way an unmailed patch is: a
+        # reviewer asks something and nobody answers. Record each CL's state
+        # for the report job, which opens an issue when one is waiting.
+        run: |
+          : > "$RUNNER_TEMP/cls.txt"
+          grep -vE '^\s*(#|$)' goasm-patches/cls.txt | while read -r cl _; do
+            curl -fsS "https://go-review.googlesource.com/changes/$cl" | tail -c +5 |
+              jq -r --arg cl "$cl" '"\($cl)\t\(.status)\t\(.unresolved_comment_count // 0)\t\(.subject)"' >> "$RUNNER_TEMP/cls.txt"
+          done
+          cat "$RUNNER_TEMP/cls.txt"
+
+      - name: Keep the CL states for the report job
+        uses: actions/upload-artifact@v7
+        with:
+          name: cls
+          path: ${{ runner.temp }}/cls.txt
+
+      - name: Apply the patches to master and verify them
+        # A mailed CL is applied as its CURRENT patchset on Gerrit, what the
+        # reviewers see, not as the local file it started from.
         run: |
           shopt -s nullglob
-          patches=(goasm-patches/*.patch)
+          dir="$RUNNER_TEMP/patches"; mkdir -p "$dir"
+          declare -A mailed
+          while read -r cl patch; do
+            mailed[$patch]=1
+            curl -fsS "https://go-review.googlesource.com/changes/$cl/revisions/current/patch?download" | base64 -d > "$dir/cl-$cl.patch"
+          done < <(grep -vE '^\s*(#|$)' goasm-patches/cls.txt)
+          for p in goasm-patches/*.patch; do
+            [ -n "${mailed[$(basename "$p")]:-}" ] || cp "$p" "$dir/"
+          done
+          patches=("$dir"/*.patch)
           if [ ${#patches[@]} -eq 0 ]; then echo "no patches"; exit 0; fi
           cd "$RUNNER_TEMP/gomaster"
-          git -c user.name=goasm-gaps -c user.email=goasm-gaps@localhost am "${patches[@]/#/$GITHUB_WORKSPACE/}"
-          arches=$(printf '%s\n' "${patches[@]}" | sed 's#.*/##; s#-.*##' | sort -u)
+          git -c user.name=goasm-gaps -c user.email=goasm-gaps@localhost am "${patches[@]}"
+          arches=$(grep -hoE '^Subject: \[PATCH\] cmd/internal/obj/[a-z0-9]+' "${patches[@]}" | sed 's#.*/##' | sort -u)
           # Go's own tests: every line a patch adds to testdata, including
           # instructions and error cases go-asmgen holds no reference for.
           pkgs=(cmd/asm/internal/asm)
@@ -96,6 +125,29 @@ jobs:
         with:
           name: verdicts
           path: ${{ runner.temp }}
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: cls
+          path: ${{ runner.temp }}
+
+      - name: Open an issue when a Go CL is waiting for us
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          waiting=$(awk -F'\t' '$2=="ABANDONED" || ($2=="NEW" && $3>0)' "$RUNNER_TEMP/cls.txt")
+          if [ -z "$waiting" ]; then echo "no CL is waiting"; exit 0; fi
+          title="Go CLs waiting for a reply"
+          if [ -n "$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[].number')" ]; then
+            echo "already reported"; exit 0
+          fi
+          {
+            echo "These upstream CLs, mailed from goasm-patches/, need attention (unresolved review comments, or abandoned):"
+            echo
+            echo "$waiting" | awk -F'\t' '{printf "- https://go.dev/cl/%s  %s, %s unresolved: %s\n", $1, $2, $3, $4}'
+          } > "$RUNNER_TEMP/clbody.md"
+          gh issue create --title "$title" --body-file "$RUNNER_TEMP/clbody.md"
 
       - name: Open an issue when Go gains an instruction
         env:
