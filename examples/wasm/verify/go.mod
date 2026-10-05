@@ -1,6 +1,6 @@
 module github.com/go-asmgen/asmgen/examples/wasm/verify
 
-go 1.26.4
+go 1.27.1
 
 require github.com/tetratelabs/wazero v1.12.0
 
