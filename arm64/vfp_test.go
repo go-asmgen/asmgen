@@ -33,6 +33,18 @@ func TestVectorFloatEncodings(t *testing.T) {
 			b.VFMLS2D(r[0], r[1], r[2])
 		case "fneg":
 			b.VFNEG2D(r[0], r[1])
+		case "fadd4s":
+			b.VFADD4S(r[0], r[1], r[2])
+		case "fsub4s":
+			b.VFSUB4S(r[0], r[1], r[2])
+		case "fmul4s":
+			b.VFMUL4S(r[0], r[1], r[2])
+		case "fmla4s":
+			b.VFMLA4S(r[0], r[1], r[2])
+		case "fmls4s":
+			b.VFMLS4S(r[0], r[1], r[2])
+		case "fneg4s":
+			b.VFNEG4S(r[0], r[1])
 		}
 	}
 	src := b.Func().String()
@@ -98,6 +110,8 @@ func TestVectorFloatRefusesARegisterThatDoesNotExist(t *testing.T) {
 		func(b *Builder) { b.VFMUL2D(0, -1, 0) },
 		func(b *Builder) { b.VFMLS2D(0, 0, 40) },
 		func(b *Builder) { b.VFNEG2D(0, 32) },
+		func(b *Builder) { b.VFADD4S(0, 0, 32) },
+		func(b *Builder) { b.VFNEG4S(-1, 0) },
 	} {
 		func() {
 			defer func() {

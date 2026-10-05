@@ -109,7 +109,10 @@ to v0.14 they were hand-encoded `WORD`s; the output is now mnemonics, the
 machine code is the same.) A test assembles them with `cmd/asm` and compares
 the result with the system assembler's encodings. Kernels built from them ran
 on Apple M4 and Neoverse-N1 against Go's own arithmetic and `math.FMA`:
-bit-identical over 2.4M lanes.
+bit-identical over 2.4M lanes. Their float32 counterparts on the `.S4`
+arrangement (four float32 lanes) are `VFADD4S`, `VFSUB4S`, `VFMUL4S`,
+`VFNEG4S`, `VFMLA4S` and `VFMLS4S`, checked against the system assembler the
+same way.
 
 **ppc64le VSX float64 arithmetic the Go assembler lacks**: `cmd/asm` has the
 VSX loads, stores and permutes (`LXVD2X`, `LXVDSX`, `STXVD2X`, `XXPERMDI`) but
