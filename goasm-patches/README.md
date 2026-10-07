@@ -68,6 +68,26 @@ commit author must be an address of the Gerrit account that signed the Google
 CLA. Once mailed, add `<CL number> <patch file>` to `cls.txt`, so the weekly
 check follows the CL and tests its current patchset.
 
+## What Go's reviewers asked for
+
+From the review of CL 845145 (ppc64 maintainer, 2026-10-06), applied to
+all three CLs:
+
+- **A short commit message.** Two or three sentences: what is added and
+  any intentional behaviour change. Do not explain Go assembler syntax or
+  list each table edit. The diff shows them.
+- **Reuse optab shapes; do not add entries.** Attach new opcodes with
+  `opset` to an existing entry of the same shape, and merge entries that
+  duplicate a shape. Accepting FPR operands on merged VSX opcodes is
+  intentional.
+- **Few test lines.** One to three per instruction (for VSX: a VSR, an
+  FPR and a VR form), with a blank line between instructions, plus each
+  limit a fix changes. The exhaustive reference set stays in
+  `internal/gap` and is checked by `goasmgap verify`, not in Go's
+  testdata.
+- **One-line comments,** such as `/* xx3-form 3 operand opcodes */`, not
+  explanations.
+
 ## The weekly check
 
 `.github/workflows/goasm-gaps.yml` runs every Monday, and on any pull request
