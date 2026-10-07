@@ -5,3 +5,4 @@
 845165 loong64-vfmadd-vldrepl.patch
 845166 loong64-vstelm-range.patch
 846285 -
+846286 -
