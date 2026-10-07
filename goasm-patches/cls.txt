@@ -1,6 +1,7 @@
-# Go CLs mailed from goasm-patches/: <CL number> <patch file it supersedes>
+# Go CLs mailed from goasm-patches/: <CL number> <patch file it supersedes, or - for a CL with no local file>
 # The weekly check applies the CURRENT patchset of each CL (what reviewers
 # see), not the local file, and reports a CL that is waiting for a reply.
 845145 ppc64-vsx-dp.patch
 845165 loong64-vfmadd-vldrepl.patch
 845166 loong64-vstelm-range.patch
+846285 -
