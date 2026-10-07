@@ -15,6 +15,7 @@ Each patch is a `git format-patch` against Go master, named
 | `loong64-vfmadd-vldrepl.patch` | `VFMADDD` `XVFMADDD` and their 14 siblings (`VF[N]M{ADD,SUB}{F,D}`, V and X); `VMOVQ`/`XVMOVQ` broadcast loads at the ends of every element size's offset range (−2048 was refused for all, as were 2046–2047 for `.B` and 2046 for `.H`) | mailed 2026-10-05: [CL 845165](https://go.dev/cl/845165) |
 | `loong64-vstelm-range.patch` | A range check for the element stores `VMOVQ Vd.T[i], off(Rj)` / `XVMOVQ` (vstelm). On Go master (go1.28-devel, 2026-10-04), an out-of-range offset was masked with `&0xff` and **silently** stored elsewhere: `VMOVQ V1.V[0], 1024(R4)` became a store to −1024. Now refused with "offset out of range". go-asmgen does not use these stores; it found the bug while writing the patch above. Go 1.27 does not have them. | mailed 2026-10-05: [CL 845166](https://go.dev/cl/845166) |
 | — (CL only) | `XVADDSP` `XVSUBSP` `XVMULSP` `XVDIVSP` `XVMADDASP` `XVMAXSP` `XVMINSP` `XVSQRTSP`: the float32 counterpart, used by go-simd/floats, chained on CL 845145 | mailed 2026-10-07: [CL 846285](https://go.dev/cl/846285) |
+| — (CL only) | s390x vector float32: `VFASB`/`WFASB`, `VFSSB`, `VFMSB`, `VFDSB`, `VFMASB`, `VFMSSB`, `VFSQSB` and their `W` forms (vector-enhancements facility 1). go-simd/floats does not vectorise float32 on s390x without them | mailed 2026-10-07: [CL 846286](https://go.dev/cl/846286) |
 
 ## From a registry entry to a CL
 
