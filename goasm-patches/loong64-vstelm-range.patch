@@ -26,7 +26,6 @@ against llvm-mc (LLVM 22.1.5, --triple=loongarch64 -mattr=+lasx).
 loong64error.s covers an offset one element past either end of each
 range, and misalignment.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
  .../asm/internal/asm/testdata/loong64enc1.s   | 16 ++++++++++++++
  .../asm/internal/asm/testdata/loong64error.s  | 22 +++++++++++++++++++

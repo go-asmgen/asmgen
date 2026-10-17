@@ -27,7 +27,6 @@ hand-written tables, like XSMAXJDP.
 The test encodings were checked against GNU as 2.44 on POWER9 and
 llvm-objdump, including VS32-VS63 in each operand position.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
  src/cmd/asm/internal/asm/testdata/ppc64.s | 75 +++++++++++++++++++++++
  src/cmd/internal/obj/ppc64/a.out.go       |  8 +++

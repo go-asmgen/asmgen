@@ -38,7 +38,6 @@ vldrepl.d and xvldrepl.d, produced by GNU as 2.43 on a Loongson
 VFMADDD and XVFMADDD absent and the two .d loads at 7/8, refusing
 -2048. llvm-mc agrees with GNU as on all 32.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
  .../asm/internal/asm/testdata/loong64enc1.s   | 76 +++++++++++++++++++
  .../asm/internal/asm/testdata/loong64error.s  | 12 +++
