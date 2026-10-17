@@ -72,8 +72,8 @@ check follows the CL and tests its current patchset.
 
 ## What Go's reviewers asked for
 
-From the review of CL 845145 (ppc64 maintainer, 2026-10-06), applied to
-all three CLs:
+From the reviews of CL 845145 (ppc64 maintainer, 2026-10-06; Go team,
+2026-10-12), applied to every CL in `cls.txt`:
 
 - **A short commit message.** Two or three sentences: what is added and
   any intentional behaviour change. Do not explain Go assembler syntax or
@@ -89,6 +89,10 @@ all three CLs:
   testdata.
 - **One-line comments,** such as `/* xx3-form 3 operand opcodes */`, not
   explanations.
+- **No `Co-authored-by`, `Assisted-by` or `Signed-off-by` lines** in the
+  commit message ([go.dev/wiki/CommitMessage](https://go.dev/wiki/CommitMessage),
+  asked on CL 845145, 2026-10-12). Only the `Change-Id` trailer stays. That
+  AI assistance was used is said in a Gerrit comment on each CL instead.
 
 ## The weekly check
 
