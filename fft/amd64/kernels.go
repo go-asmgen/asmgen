@@ -61,6 +61,11 @@ type Consts struct {
 	// cosine R9C<e> in every lane and the row R9S<e> = [−ss, ss], ss =
 	// s·sin(2π·e/9).
 	R9C1, R9S1, R9C2, R9S2, R9C4, R9S4 int
+	// R32 is the first of the radix-32 final pass's rows (LastR32, go-fft
+	// Round 42): for each exponent e of r32Es in turn, a row cos θ in
+	// every lane, then a row [−ss, ss], ss = s·sin θ, θ = 2π·e/32 (two
+	// rows per exponent, 28 in all).
+	R32 int
 }
 
 // SplitConsts gives the byte offsets of the 32-byte rows of the split-layout
@@ -68,8 +73,10 @@ type Consts struct {
 // sign flip), and the radix-3 and radix-5 constants Half 0.5, Sin120
 // sin(2π/3), C51, C52, S51 and S52 cos(2π/5), cos(4π/5), sin(2π/5) and
 // sin(4π/5). The 512-bit split kernels broadcast H and Neg from the same rows.
+// R32 is the first of seven rows C_k = cos(kπ/16), k = 1 .. 7, which the
+// radix-32 kernels read (SplitR32, go-fft Round 42).
 type SplitConsts struct {
-	H, Neg, Half, Sin120, C51, C52, S51, S52 int
+	H, Neg, Half, Sin120, C51, C52, S51, S52, R32 int
 }
 
 // Kernels builds the kernels that read a constants table.
