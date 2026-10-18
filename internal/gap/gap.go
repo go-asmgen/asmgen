@@ -29,13 +29,17 @@ type Insn struct {
 	// Plan9 is the proposed cmd/asm form, with {i} standing for operand i in
 	// ISA order: "XVADDDP VS{1}, VS{2}, VS{0}".
 	Plan9 string
-	// Mask and Bits fix the opcode: a word w is this instruction, whatever
-	// its operands, iff w&Mask == Bits. This finds the instruction in Go's
-	// test data under any spelling.
-	Mask, Bits uint32
-	// Encode returns the machine word for operands in ISA order. It panics
-	// on an operand the instruction cannot encode.
-	Encode func(ops ...int) uint32
+	// Mask and Bits fix the opcode: an encoding w is this instruction,
+	// whatever its operands, iff w&Mask == Bits. This finds the instruction
+	// in Go's test data under any spelling.
+	//
+	// An encoding is the instruction's bytes read as one big-endian number,
+	// Arch.Size bytes long: the 32-bit word on ppc64 and loong64, the 48 bits
+	// of a 6-byte s390x vector instruction.
+	Mask, Bits uint64
+	// Encode returns the encoding for operands in ISA order. It panics on an
+	// operand the instruction cannot encode.
+	Encode func(ops ...int) uint64
 	// Golden lists encodings produced by an independent assembler (named in
 	// Source), operands in ISA order.
 	Golden []Case
@@ -48,7 +52,7 @@ type Insn struct {
 // A Case is one reference encoding.
 type Case struct {
 	Ops  []int
-	Want uint32
+	Want uint64
 }
 
 // Syntax renders the proposed Plan 9 form for the operands.
@@ -62,8 +66,17 @@ func (in *Insn) Syntax(ops ...int) string {
 
 // Word is the line an architecture package emits while cmd/asm lacks the
 // instruction: the encoding, and the spelling it will have.
+//
+// A 6-byte instruction (s390x) is a WORD of its first four bytes and a BYTE
+// for each of the other two, on one line: cmd/asm writes WORD big-endian on
+// s390x and pads neither, so the three directives lay down exactly the
+// instruction's bytes, and one line keeps them from being separated.
 func (in *Insn) Word(ops ...int) string {
-	return fmt.Sprintf("WORD $0x%08x // %s", in.Encode(ops...), in.Syntax(ops...))
+	w := in.Encode(ops...)
+	if a := ArchOf(in.Arch); a != nil && a.size() == 6 {
+		return fmt.Sprintf("WORD $0x%08x; BYTE $0x%02x; BYTE $0x%02x // %s", w>>16, byte(w>>8), byte(w), in.Syntax(ops...))
+	}
+	return fmt.Sprintf("WORD $0x%08x // %s", w, in.Syntax(ops...))
 }
 
 // All returns every entry, architecture by architecture.
@@ -95,14 +108,21 @@ type Arch struct {
 	// Testdata is the file under src/cmd/asm/internal/asm/testdata that a
 	// patch adds its lines to.
 	Testdata string
-	// BigEndianTestdata says how that file writes an encoding: as the word
-	// in hex (ppc64, whose tests assemble big-endian) or as its bytes in
-	// little-endian order (loong64).
+	// Size is the length of the family's entries in bytes: 4 when zero, 6
+	// for the s390x vector instructions.
+	Size int
+	// BigEndianTestdata says how that file writes an encoding: as the bytes
+	// in memory order (ppc64, whose tests assemble big-endian, and s390x)
+	// or as the word's bytes in little-endian order (loong64).
 	BigEndianTestdata bool
 	// TabbedTestdata says the file tabs the operands to column 16
 	// (loong64enc1.s), rather than padding the instruction to 32 columns
 	// (ppc64.s).
 	TabbedTestdata bool
+	// OperandPad, when not zero, says the file puts a tab after the
+	// mnemonic and pads the operands to this many columns (s390x.s:
+	// "\tVFADB\tV1, V2, V3              // ...", 24).
+	OperandPad int
 
 	insns []*Insn
 }
@@ -122,18 +142,34 @@ func ArchOf(name string) *Arch {
 	return nil
 }
 
-// Hex writes w the way the family's test data does.
-func (a *Arch) Hex(w uint32) string {
-	if a.BigEndianTestdata {
-		return fmt.Sprintf("%08x", w)
+func (a *Arch) size() int {
+	if a.Size == 0 {
+		return 4
 	}
-	return fmt.Sprintf("%02x%02x%02x%02x", byte(w), byte(w>>8), byte(w>>16), byte(w>>24))
+	return a.Size
+}
+
+// Hex writes w the way the family's test data does.
+func (a *Arch) Hex(w uint64) string {
+	n := a.size()
+	if a.BigEndianTestdata {
+		return fmt.Sprintf("%0*x", 2*n, w)
+	}
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&b, "%02x", byte(w>>(8*i)))
+	}
+	return b.String()
 }
 
 // TestdataLine writes one reference case the way the family's test file
 // does, including its habit of writing a zero offset as (R4), not 0(R4).
 func (a *Arch) TestdataLine(in *Insn, c Case) string {
 	insn := zeroOffset.ReplaceAllString(in.Syntax(c.Ops...), "$1(")
+	if a.OperandPad != 0 {
+		mnemonic, operands, _ := strings.Cut(insn, " ")
+		return fmt.Sprintf("\t%s\t%-*s// %s", mnemonic, a.OperandPad, operands, a.Hex(c.Want))
+	}
 	if !a.TabbedTestdata {
 		return fmt.Sprintf("\t%-32s// %s", insn, a.Hex(c.Want))
 	}
@@ -149,14 +185,18 @@ func (a *Arch) TestdataLine(in *Insn, c Case) string {
 var zeroOffset = regexp.MustCompile(`(^|[ ,])0\(`)
 
 // ParseHex reads an encoding written by Hex.
-func (a *Arch) ParseHex(s string) (uint32, error) {
-	v, err := strconv.ParseUint(s, 16, 32)
-	if err != nil || len(s) != 8 {
-		return 0, fmt.Errorf("gap: %q is not an 8-digit encoding", s)
+func (a *Arch) ParseHex(s string) (uint64, error) {
+	n := a.size()
+	v, err := strconv.ParseUint(s, 16, 64)
+	if err != nil || len(s) != 2*n {
+		return 0, fmt.Errorf("gap: %q is not a %d-digit encoding", s, 2*n)
 	}
-	w := uint32(v)
-	if !a.BigEndianTestdata {
-		w = w>>24 | w>>8&0xff00 | w<<8&0xff0000 | w<<24
+	if a.BigEndianTestdata {
+		return v, nil
+	}
+	var w uint64
+	for i := 0; i < n; i++ {
+		w = w<<8 | v>>(8*i)&0xff
 	}
 	return w, nil
 }
@@ -164,9 +204,9 @@ func (a *Arch) ParseHex(s string) (uint32, error) {
 // Insns returns the family's entries.
 func (a *Arch) Insns() []*Insn { return a.insns }
 
-func reg(arch, kind string, r, max int) uint32 {
+func reg(arch, kind string, r, max int) uint64 {
 	if r < 0 || r > max {
 		panic(fmt.Sprintf("%s: %s register %d does not exist", arch, kind, r))
 	}
-	return uint32(r)
+	return uint64(r)
 }

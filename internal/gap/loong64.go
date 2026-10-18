@@ -22,7 +22,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "loong64", ISA: "vfmadd.d", Plan9: "VFMADDD V{3}, V{2}, V{1}, V{0}",
 		Mask: 0xfff00000, Bits: 0x09200000,
-		Encode: func(ops ...int) uint32 { return r4(0x09200000, ops[0], ops[1], ops[2], ops[3]) },
+		Encode: func(ops ...int) uint64 { return r4(0x09200000, ops[0], ops[1], ops[2], ops[3]) },
 		Source: loong64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0, 0}, 0x09200000},     // vfmadd.d $vr0,$vr0,$vr0,$vr0
@@ -38,7 +38,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "loong64", ISA: "xvfmadd.d", Plan9: "XVFMADDD X{3}, X{2}, X{1}, X{0}",
 		Mask: 0xfff00000, Bits: 0x0a200000,
-		Encode: func(ops ...int) uint32 { return r4(0x0a200000, ops[0], ops[1], ops[2], ops[3]) },
+		Encode: func(ops ...int) uint64 { return r4(0x0a200000, ops[0], ops[1], ops[2], ops[3]) },
 		Source: loong64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0, 0}, 0x0a200000},     // xvfmadd.d $xr0,$xr0,$xr0,$xr0
@@ -54,7 +54,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "loong64", ISA: "vldrepl.d", Plan9: "VMOVQ {2}(R{1}), V{0}.V2",
 		Mask: 0xfff80000, Bits: 0x30100000,
-		Encode: func(ops ...int) uint32 { return ldrepl(0x30100000, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return ldrepl(0x30100000, ops[0], ops[1], ops[2]) },
 		Source: loong64Source,
 		Note:   "cmd/asm assembles it, but refuses offset -2048",
 		Golden: []Case{
@@ -71,7 +71,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "loong64", ISA: "xvldrepl.d", Plan9: "XVMOVQ {2}(R{1}), X{0}.V4",
 		Mask: 0xfff80000, Bits: 0x32100000,
-		Encode: func(ops ...int) uint32 { return ldrepl(0x32100000, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return ldrepl(0x32100000, ops[0], ops[1], ops[2]) },
 		Source: loong64Source,
 		Note:   "cmd/asm assembles it, but refuses offset -2048",
 		Golden: []Case{
@@ -89,17 +89,17 @@ func init() {
 }
 
 // r4 encodes the four-register form: d, j, k, a from bit 0 up, five bits each.
-func r4(base uint32, d, j, k, a int) uint32 {
+func r4(base uint64, d, j, k, a int) uint64 {
 	return base | vec(a)<<15 | vec(k)<<10 | vec(j)<<5 | vec(d)
 }
 
 // ldrepl encodes a doubleword broadcast load: a signed 9-bit offset in units
 // of 8 bytes.
-func ldrepl(base uint32, d, rj, off int) uint32 {
+func ldrepl(base uint64, d, rj, off int) uint64 {
 	if off%8 != 0 || off < -2048 || off > 2040 {
 		panic(fmt.Sprintf("loong64: broadcast-load offset %d is not a multiple of 8 in [-2048, 2040]", off))
 	}
-	return base | uint32(off/8)&0x1ff<<10 | reg("loong64", "general", rj, 31)<<5 | vec(d)
+	return base | uint64(off/8)&0x1ff<<10 | reg("loong64", "general", rj, 31)<<5 | vec(d)
 }
 
-func vec(r int) uint32 { return reg("loong64", "vector", r, 31) }
+func vec(r int) uint64 { return reg("loong64", "vector", r, 31) }
