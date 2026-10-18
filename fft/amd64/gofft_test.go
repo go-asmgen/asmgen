@@ -21,8 +21,9 @@ var goFFT = &Kernels{
 		R16C1:  288, R16S1: 320, R16NH: 352, R16NC1: 384,
 		R16SS1: 416, R16SSH: 448, R16SSC1: 480, R16SSN1: 512,
 		R9C1: 544, R9S1: 576, R9C2: 608, R9S2: 640, R9C4: 672, R9S4: 704,
+		R32: 736,
 	},
-	SplitK: SplitConsts{H: 0, Neg: 32, Half: 64, Sin120: 96, C51: 128, C52: 160, S51: 192, S52: 224},
+	SplitK: SplitConsts{H: 0, Neg: 32, Half: 64, Sin120: 96, C51: 128, C52: 160, S51: 192, S52: 224, R32: 256},
 }
 
 // goFFTFMA builds go-fft's FMA twins (its Round 41).
@@ -199,6 +200,27 @@ func goFFTFiles() map[string]string {
 		})
 	}
 	files["fmasplit512_amd64.s"] = f.String()
+
+	// The radix-32 kernels of the FMA plans (go-fft's Round 42).
+	f = emit.NewFile("amd64")
+	forSplits(func(inS, outS, inverse bool) {
+		kf.SplitR32(f, splitName("skSplit", 32, inS, outS, inverse)+"FMA", false, inS, outS, inverse)
+	})
+	forSplits(func(inS, outS, inverse bool) {
+		kf.SplitR32(f, splitName("intelSplit512R", 32, inS, outS, inverse)+"FMA", true, inS, outS, inverse)
+	})
+	kf.LastR32(f, "skLast32AVX2FMA", false)
+	kf.LastR32(f, "skLast32AVX512FMA", true)
+	files["r32fma_amd64.s"] = f.String()
+
+	f = emit.NewFile("amd64")
+	forSplits(func(inS, outS, inverse bool) {
+		kf.SplitR32InFrame(f, splitName("skSplit", 32, inS, outS, inverse)+"FMAF", false, inS, outS, inverse)
+	})
+	forSplits(func(inS, outS, inverse bool) {
+		kf.SplitR32InFrame(f, splitName("intelSplit512R", 32, inS, outS, inverse)+"FMAF", true, inS, outS, inverse)
+	})
+	files["r32frame_amd64.s"] = Funcdata(f.String())
 	return files
 }
 
