@@ -201,7 +201,7 @@ func (e splitEmit) body3(first bool) {
 	e.mulc(11, 7, e.c.SplitK.Half)
 	e.sub(11, 1, 11)
 	e.mulc(2, 2, e.c.SplitK.Sin120)
-	e.mulc(3, 3, e.c.SplitK.Sin120)     // sin(2π/3)·t2
+	e.mulc(3, 3, e.c.SplitK.Sin120)    // sin(2π/3)·t2
 	e.rotAdd(4, 5, 6, 7, 10, 11, 2, 3) // y1, y2 = ca ± rotS(·)
 	t := [4]int{0, 1, 2, 3}
 	e.twStore(4, 5, 1, t, first)
