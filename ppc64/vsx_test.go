@@ -19,6 +19,14 @@ func TestVSXEmitsTheRegistryWord(t *testing.T) {
 		"xvmaxdp":   func(b *Builder, r []int) { b.XVMAXDP(r[0], r[1], r[2]) },
 		"xvmindp":   func(b *Builder, r []int) { b.XVMINDP(r[0], r[1], r[2]) },
 		"xvsqrtdp":  func(b *Builder, r []int) { b.XVSQRTDP(r[0], r[1]) },
+		"xvaddsp":   func(b *Builder, r []int) { b.XVADDSP(r[0], r[1], r[2]) },
+		"xvsubsp":   func(b *Builder, r []int) { b.XVSUBSP(r[0], r[1], r[2]) },
+		"xvmulsp":   func(b *Builder, r []int) { b.XVMULSP(r[0], r[1], r[2]) },
+		"xvdivsp":   func(b *Builder, r []int) { b.XVDIVSP(r[0], r[1], r[2]) },
+		"xvmaddasp": func(b *Builder, r []int) { b.XVMADDASP(r[0], r[1], r[2]) },
+		"xvmaxsp":   func(b *Builder, r []int) { b.XVMAXSP(r[0], r[1], r[2]) },
+		"xvminsp":   func(b *Builder, r []int) { b.XVMINSP(r[0], r[1], r[2]) },
+		"xvsqrtsp":  func(b *Builder, r []int) { b.XVSQRTSP(r[0], r[1]) },
 	}
 	for _, in := range gap.ArchOf("ppc64").Insns() {
 		emit, ok := ops[in.ISA]
