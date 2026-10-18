@@ -44,6 +44,34 @@ func (b *Builder) XVMINDP(t, a, bb int) *Builder { return b.vsx("xvmindp", t, a,
 // XVSQRTDP emits xvsqrtdp: VSR[t] = sqrt(VSR[b]), correctly rounded.
 func (b *Builder) XVSQRTDP(t, bb int) *Builder { return b.vsx("xvsqrtdp", t, bb) }
 
+// The single-precision family: the same operations on four float32 lanes.
+
+// XVADDSP emits xvaddsp: VSR[t] = VSR[a] + VSR[b], four float32 lanes.
+func (b *Builder) XVADDSP(t, a, bb int) *Builder { return b.vsx("xvaddsp", t, a, bb) }
+
+// XVSUBSP emits xvsubsp: VSR[t] = VSR[a] - VSR[b].
+func (b *Builder) XVSUBSP(t, a, bb int) *Builder { return b.vsx("xvsubsp", t, a, bb) }
+
+// XVMULSP emits xvmulsp: VSR[t] = VSR[a] × VSR[b] (each product rounded once).
+func (b *Builder) XVMULSP(t, a, bb int) *Builder { return b.vsx("xvmulsp", t, a, bb) }
+
+// XVDIVSP emits xvdivsp: VSR[t] = VSR[a] / VSR[b].
+func (b *Builder) XVDIVSP(t, a, bb int) *Builder { return b.vsx("xvdivsp", t, a, bb) }
+
+// XVMADDASP emits xvmaddasp: VSR[t] = VSR[a] × VSR[b] + VSR[t], fused (one
+// rounding).
+func (b *Builder) XVMADDASP(t, a, bb int) *Builder { return b.vsx("xvmaddasp", t, a, bb) }
+
+// XVMAXSP emits xvmaxsp: VSR[t] = max(VSR[a], VSR[b]) per lane, with the
+// ISA's NaN rule (see XVMAXDP).
+func (b *Builder) XVMAXSP(t, a, bb int) *Builder { return b.vsx("xvmaxsp", t, a, bb) }
+
+// XVMINSP emits xvminsp: VSR[t] = min(VSR[a], VSR[b]) per lane (same NaN rule).
+func (b *Builder) XVMINSP(t, a, bb int) *Builder { return b.vsx("xvminsp", t, a, bb) }
+
+// XVSQRTSP emits xvsqrtsp: VSR[t] = sqrt(VSR[b]), correctly rounded.
+func (b *Builder) XVSQRTSP(t, bb int) *Builder { return b.vsx("xvsqrtsp", t, bb) }
+
 // vsx emits the WORD the gap registry encodes, which also refuses a register
 // outside VS0–VS63 (it would spill into a neighbouring field).
 func (b *Builder) vsx(isa string, ops ...int) *Builder {
