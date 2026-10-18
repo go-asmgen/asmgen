@@ -125,6 +125,11 @@ kernels in `examples/simd/ppc64` were run on POWER8 and POWER9 against Go's
 arithmetic, `math.Sqrt` and `math.FMA`, and the results were bit-identical.
 (`XVMAXDP`/`XVMINDP` follow the ISA's NaN rule, not Go's NaN-propagating
 `max`.)
+Their float32 counterparts (four float32 lanes) are `XVADDSP`, `XVSUBSP`,
+`XVMULSP`, `XVDIVSP`, `XVMADDASP`, `XVMAXSP`, `XVMINSP` and `XVSQRTSP`, pinned
+the same way (70 cases, GNU as 2.44 and `llvm-mc` agreeing). go-ndarray's
+float32 pairwise-sum block runs on `XVADDSP` and matches the scalar loop bit
+for bit on a POWER9.
 
 **loong64 LSX/LASX fused multiply-add and broadcast load**:
 `Builder.XVFMADDD`/`VFMADDD` (fused, four/two lanes) are `WORD`s, because
