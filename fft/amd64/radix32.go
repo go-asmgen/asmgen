@@ -549,14 +549,17 @@ func (e skEmit) r32Last() {
 
 // LastR32 emits name(cc, ch *complex128, k *float64, l1 int), the final
 // radix-32 pass (ido == 1) with fused products: two blocks per YMM register
-// as Last runs the other radices, an odd l1 finished by one 128-bit step.
-// The constants table is the interleaved one (Kernels.K), which must hold
-// the rows of Consts.R32. FMA kernels only: Kernels.FMA must be set.
+// as Last runs the other radices, an odd l1 finished by one 128-bit step;
+// when wide, four blocks per ZMM register as Last512 runs them (VINSERTF32X4
+// gathers blocks k..k+3), l1 mod 4 finished by one 256-bit and one 128-bit
+// step, with the 64-byte rows of Pass512's table. The constants table is
+// the interleaved one (Kernels.K), which must hold the rows of Consts.R32.
+// FMA kernels only: Kernels.FMA must be set.
 //
-// Registers: AX = the block pair's inputs, BX = its first output, DX = D =
-// l1·16, R13 = 3·D, R11 = 16·D, R14 = constants, R10 = pairs left; R8 and
+// Registers: AX = the blocks' inputs, BX = their first output, DX = D =
+// l1·16, R13 = 3·D, R11 = 16·D, R14 = constants, R10 = steps left; R8 and
 // R9 address the slots (r32Slot1, r32Slot2).
-func (c *Kernels) LastR32(f *emit.File, name string) {
+func (c *Kernels) LastR32(f *emit.File, name string, wide bool) {
 	if !c.FMA {
 		panic("fft/amd64: LastR32 builds FMA kernels only")
 	}
@@ -565,27 +568,38 @@ func (c *Kernels) LastR32(f *emit.File, name string) {
 		[]asm.Type{asm.Ptr, asm.Ptr, asm.Ptr, asm.Int64}, nil, nil,
 	)
 	b := asm.NewFunc(name, sig, 0)
-	y := skEmit{c: c, b: b, w: "Y", last: 32}
-	x := skEmit{c: c, b: b, w: "X", last: 32}
 	b.LoadArg("cc", "AX").LoadArg("ch", "BX").LoadArg("k", "R14").LoadArg("l1", "DX")
+	shift, lead := 1, skEmit{c: c, b: b, w: "Y", last: 32}
+	if wide {
+		shift, lead = 2, skEmit{c: c, b: b, w: "Z", last: 32, wide: true}
+	}
 	b.Raw("MOVQ DX, R10").
-		Raw("SHRQ $1, R10"). // block pairs
-		Raw("SHLQ $4, DX").  // D
+		Raw("SHRQ $%d, R10", shift). // block pairs (quads)
+		Raw("SHLQ $4, DX").          // D
 		Raw("LEAQ (DX)(DX*2), R13").
 		Raw("MOVQ DX, R11").
 		Raw("SHLQ $4, R11"). // 16·D
 		Raw("loop:").
 		Raw("TESTQ R10, R10").
 		Raw("JZ tail")
-	y.r32Last()
-	b.Raw("ADDQ $%d, AX", 32*32).
-		Raw("ADDQ $32, BX").
+	lead.r32Last()
+	step := 16 << shift // bytes of output per step
+	b.Raw("ADDQ $%d, AX", 32*step).
+		Raw("ADDQ $%d, BX", step).
 		Raw("DECQ R10").
 		Raw("JMP loop").
-		Raw("tail:").
-		Raw("TESTQ $16, DX"). // l1 odd
-		Raw("JZ done")
-	x.r32Last()
+		Raw("tail:")
+	if wide {
+		b.Raw("TESTQ $32, DX"). // l1 & 2
+					Raw("JZ single")
+		skEmit{c: c, b: b, w: "Y", last: 32, wide: true}.r32Last()
+		b.Raw("ADDQ $%d, AX", 32*32).
+			Raw("ADDQ $32, BX").
+			Raw("single:")
+	}
+	b.Raw("TESTQ $16, DX"). // l1 odd
+				Raw("JZ done")
+	skEmit{c: c, b: b, w: "X", last: 32, wide: wide}.r32Last()
 	b.Raw("done:").
 		Raw("VZEROUPPER").
 		Ret()
