@@ -77,6 +77,25 @@ type sxEmit struct {
 	inS, outS bool
 	inverse   bool
 	spill     int // frame offset of the radix-8 body's four spilled registers
+	// slots, when positive, is the frame offset of 32 slots of 2·vb bytes
+	// that hold the values between the stages, instead of the output.
+	slots int
+}
+
+// slot1 and slot2 address stage 1's slot k1 + 8·n2 and stage 2's k1 + 8·k2:
+// in the frame when e.slots is set, else in the output (r32Slot1, r32Slot2).
+func (e sxEmit) slot1(n2, k1 int) string {
+	if e.slots > 0 {
+		return fmt.Sprintf("%d(SP)", e.slots+2*e.vb()*(k1+8*n2))
+	}
+	return r32Slot1(k1)
+}
+
+func (e sxEmit) slot2(k1, k2 int) string {
+	if e.slots > 0 {
+		return fmt.Sprintf("%d(SP)", e.slots+2*e.vb()*(k1+8*k2))
+	}
+	return r32Slot2(k2)
 }
 
 func (e sxEmit) raw(format string, a ...any) { e.b.Raw(format, a...) }
@@ -97,7 +116,14 @@ func (e sxEmit) vb() int {
 	return 32
 }
 
-func (e sxEmit) im(addr string) string { return fmt.Sprintf("%d%s", e.vb(), addr) }
+// im addresses the imaginary parts of the group at addr: vb bytes on.
+func (e sxEmit) im(addr string) string {
+	var off int
+	if n, _ := fmt.Sscanf(addr, "%d(SP)", &off); n == 1 {
+		return fmt.Sprintf("%d(SP)", off+e.vb())
+	}
+	return fmt.Sprintf("%d%s", e.vb(), addr)
+}
 
 // sp addresses spill slot q (0..3) of the radix-8 body.
 func (e sxEmit) sp(q int) string { return fmt.Sprintf("%d(SP)", e.spill+q*e.vb()) }
@@ -342,13 +368,19 @@ func r32Bases(b *asm.Builder, n2 int, inputs bool) {
 // body emits one radix-32 butterfly over a group of points.
 func (e sxEmit) body(first bool) {
 	for n2 := 0; n2 < 4; n2++ {
-		r32Bases(e.b, n2, true)
+		if e.slots > 0 {
+			e.raw("%s", [...]string{"MOVQ AX, SI", "LEAQ (AX)(CX*1), SI", "LEAQ (AX)(CX*2), SI", "LEAQ (AX)(R12*1), SI"}[n2])
+			e.raw("LEAQ (SI)(CX*8), DI")
+			e.raw("LEAQ (DI)(CX*8), DI")
+		} else {
+			r32Bases(e.b, n2, true)
+		}
 		load := func(n1, re, im, t0, t1 int) { e.loadAt(r32In(n1), e.inS, re, im, t0, t1) }
 		e.bfly8(load, func(re, im, k1 int, t [4]int) {
 			if n2 > 0 && k1 > 0 {
 				re, im = e.twiddle32(re, im, n2*k1, t)
 			}
-			e.storeAt(r32Slot1(k1), true, re, im, 0, 0)
+			e.storeAt(e.slot1(n2, k1), true, re, im, 0, 0)
 		})
 	}
 	e.raw("MOVQ BX, R8")
@@ -358,7 +390,7 @@ func (e sxEmit) body(first bool) {
 		}
 		// V0 (0,1) V1 (2,3) V2 (4,5) V3 (6,7), stored split by stage 1.
 		for n2 := 0; n2 < 4; n2++ {
-			e.loadAt(r32Slot2(n2), true, 2*n2, 2*n2+1, 0, 0)
+			e.loadAt(e.slot2(k1, n2), true, 2*n2, 2*n2+1, 0, 0)
 		}
 		e.add(8, 0, 4) // t2 = V0 + V2
 		e.sub(0, 0, 4) // t1 = V0 − V2
@@ -400,6 +432,18 @@ func (e sxEmit) body(first bool) {
 // R9 address the inputs and slots of each stage (r32In, r32Slot1,
 // r32Slot2).
 func (c *Kernels) SplitR32(f *emit.File, name string, wide, inS, outS, inverse bool) {
+	c.splitR32(f, name, wide, inS, outS, inverse, false)
+}
+
+// SplitR32InFrame is SplitR32 with the values between the stages in 32
+// slots of its own frame instead of the output: a 2 KB frame (4 KB when
+// wide), so the kernel is not NOSPLIT (the assembler inserts the stack
+// check) and its file must include funcdata.h (Funcdata).
+func (c *Kernels) SplitR32InFrame(f *emit.File, name string, wide, inS, outS, inverse bool) {
+	c.splitR32(f, name, wide, inS, outS, inverse, true)
+}
+
+func (c *Kernels) splitR32(f *emit.File, name string, wide, inS, outS, inverse, inFrame bool) {
 	if !c.FMA {
 		panic("fft/amd64: SplitR32 builds FMA kernels only")
 	}
@@ -408,7 +452,16 @@ func (c *Kernels) SplitR32(f *emit.File, name string, wide, inS, outS, inverse b
 		[]asm.Type{asm.Ptr, asm.Ptr, asm.Ptr, asm.Ptr, asm.Int64, asm.Int64}, nil, nil,
 	)
 	e := sxEmit{c: c, wide: wide, inS: inS, outS: outS, inverse: inverse, spill: 16}
-	b := asm.NewFunc(name, sig, 16+4*e.vb())
+	frame := 16 + 4*e.vb()
+	var b *asm.Builder
+	if inFrame {
+		e.slots = frame
+		frame += 64 * e.vb()
+		b = asm.NewFuncFlags(name, sig, frame, "")
+		b.Raw("NO_LOCAL_POINTERS")
+	} else {
+		b = asm.NewFunc(name, sig, frame)
+	}
 	e.b = b
 	group, shift := 2*e.vb(), 6
 	if wide {
