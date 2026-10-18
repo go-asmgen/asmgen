@@ -197,6 +197,38 @@ For struct/slice/string parameters, build the layout with
 [`abi`](abi)`.LayoutArgs` and the `Struct`/`Slice`/`String` constructors; see
 [`examples/aggregate`](examples/aggregate).
 
+## FFT kernel builders (`fft/`)
+
+The SIMD kernels of [go-fft](https://github.com/go-fft/fft) are built here,
+one package per architecture, on top of the builders above:
+
+| package | kernels |
+|---|---|
+| [`fft/amd64`](fft/amd64) | Stockham passes of radix 2, 3, 4, 5, 8, 9, 10, 12, 15, 16 and 20 (AVX2), and of radix 2, 4 and 8 at 512 bits; final passes, batched, strided and run-writing passes; the split layouts at 256 and 512 bits; float32 passes; the real-FFT untangle and retangle; SSE2 and AVX2 complex products; the two- and three-pass stack-frame trampolines and their address table |
+| [`fft/arm64`](fft/arm64) | NEON Stockham passes of radix 2, 3, 4, 5 and 8 in float64 and float32 (pass, final pass, batched pass, block-split layout); the untangle and retangle; the complex product |
+| [`fft/riscv64`](fft/riscv64), [`fft/s390x`](fft/s390x) | the RVV and vector-facility complex products |
+
+Each builder appends one TEXT block to an `emit.File`. The caller supplies
+what belongs to it: the symbol, the offsets of the constants in its tables
+(`Consts`, `SplitConsts`) and, on amd64, whether the products are fused
+(`Kernels.FMA`). The arguments, registers and frame are the kernel's own and
+are documented on each builder. go-fft keeps a thin generator that names its
+kernels and writes its files:
+
+```go
+k := &fft.Kernels{K: fft.Consts{Sign: 0, Half: 32 /* ... */}}
+f := emit.NewFile("amd64")
+k.Pass(f, "skPass4AVX2", 4) // name(cc, ch, tw *complex128, k *float64, ido, l1 int)
+k.Last(f, "skLast4AVX2", 4) // name(cc, ch *complex128, k *float64, l1 int)
+```
+
+Every kernel is bit-identical to a scalar Go reference in go-fft, whose tests
+check it. Here, `testdata/gofft.sha256` pins every file go-fft generates to the
+bytes go-fft commits, golden files pin one or two kernels of every builder,
+every one of them goes through the Go assembler, and
+[`examples/fft`](examples/fft) runs some of them (complex products, a 16-point
+FFT) on each architecture.
+
 ## Validate locally (Go toolchain required)
 
 The library packages (`abi`, `emit`, `amd64`, `arm64`, `riscv64`, `loong64`,
