@@ -8,21 +8,21 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// The split layout at 512 bits (Round 28, AVX-512 Intel). genStockhamSplit's
+// The split layout at 512 bits (Round 28, AVX-512 Intel). Split's
 // kernels with eight points per register: eight points 8q .. 8q+7 occupy the
 // 128 bytes they occupy interleaved, as their real parts in the order (0, 4,
 // 1, 5, 2, 6, 3, 7), then their imaginary parts in the same order. That is
 // what VUNPCKLPD and VUNPCKHPD make of two interleaved ZMM loads
 // ([r0 i0 r1 i1 r2 i2 r3 i3], [r4 i4 … r7 i7] → [r0 r4 r1 r5 r2 r6 r3 r7]),
 // one in-lane shuffle per register each way, as at 256 bits; the twiddles are
-// stored in that order (kernels.intelSplitTwiddles512). The bodies are
-// genStockhamSplit's, operation for operation, so the result is the scalar
+// stored in that order (go-fft's intelSplitTwiddles512). The bodies are
+// Split's, operation for operation, so the result is the scalar
 // pass's bits. The i = 0 point (lane 0 of a block's first group) is put
 // back by a blend under opmask K1 = 1. The two constants (√2/2 and −0,
-// kernels.splitK's rows) are broadcast from memory by the instructions that
+// go-fft's splitK's rows) are broadcast from memory by the instructions that
 // use them; the sign flip is VPXORQ, which AVX-512F has (VXORPD on ZMM needs
 // AVX512DQ). Only Z0..Z15 are written, and the radix-8 body spills four of
-// them to its frame as genStockhamSplit's does. VZEROUPPER does not clean
+// them to its frame as Split's does. VZEROUPPER does not clean
 // Z16..Z31: a first build that kept those four values and the constants
 // there ran the powers of two 1.07–1.08× faster at 2048 and 4096, but every
 // composite transform run after it in the same process 4–5% slower on
@@ -30,7 +30,7 @@ import (
 //
 // intelSplit512R{r}{in}{out}{Fwd|Inv}(cc, ch, tw *complex128, k *float64,
 // ido, l1 int), ido a positive multiple of eight. Registers as in
-// genStockhamSplit.
+// Split.
 
 type intelSplit512Emit struct {
 	c         *Kernels

@@ -8,8 +8,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Radix-10, -15 and -20 pass kernels (Round 26), into comp2_amd64.s: the fft
-// package's radix5q.go, the prime-factor algorithm for r = 5·q, q = 2, 3, 4.
+// Radix-10, -15 and -20 pass kernels (Round 26): go-fft's radix5q.go, the prime-factor algorithm for r = 5·q, q = 2, 3, 4.
 // Input n = (q·n1 + 5·n2) mod r, output k = (a·k1 + b·k2) mod r (a ≡ 1 mod 5,
 // a ≡ 0 mod q, b ≡ 0 mod 5, b ≡ 1 mod q): q radix-5 butterflies (one per n2,
 // over n1), then five radix-q butterflies (one per k1, over n2), with no
@@ -33,7 +32,7 @@ var (
 )
 
 // comp2Addr addresses stream j from its base: input streams j·S, output
-// streams j·OS.
+// streams j·OS. A final pass reads its inputs through skEmit.in, not this.
 func comp2Addr(out bool, j int) string {
 	base, s, s3 := comp2InBase[j/5], "CX", "R12"
 	if out {
@@ -50,15 +49,6 @@ func comp2Addr(out bool, j int) string {
 		return fmt.Sprintf("(%s)(%s*1)", base, s3)
 	}
 	return fmt.Sprintf("(%s)(%s*4)", base, s)
-}
-
-// comp2LastAddr addresses output stream j of a final-pass kernel (the inputs
-// are read through AX by skEmit.in).
-func comp2LastAddr(out bool, j int) string {
-	if !out {
-		panic("comp2LastAddr: the final pass reads through skEmit.in")
-	}
-	return comp2Addr(true, j)
 }
 
 // comp2Map is radix5q.go's index map for r = 5·q.
@@ -96,7 +86,7 @@ func comp2NewMap(q int) comp2Map {
 // comp2Slot is the frame offset of stage-1 value (n2, k1).
 func comp2Slot(q, n2, k1 int) string { return fmt.Sprintf("%d(SP)", 32*(q*k1+n2)) }
 
-// comp2Bfly5 emits the Go bfly5 on input streams js (the body of genStockham's
+// comp2Bfly5 emits the Go bfly5 on input streams js (the body of Pass's
 // radix 5, its loads included) and leaves y0..y4 in Y7, Y1, Y2, Y3, Y4.
 func (e skEmit) comp2Bfly5(js [5]int) [5]int {
 	e.in(0, js[0])
@@ -267,7 +257,7 @@ func (c *Kernels) passPFA(f *emit.File, name string, q int) {
 }
 
 // lastPFA emits Last's radix-r final pass for r = 5·q (ido == 1),
-// two blocks per register as in genStockhamLastAVX2, an odd l1 finished by
+// two blocks per register as in Last, an odd l1 finished by
 // one 128-bit step.
 func (c *Kernels) lastPFA(f *emit.File, name string, q int) {
 	r := 5 * q
@@ -277,8 +267,8 @@ func (c *Kernels) lastPFA(f *emit.File, name string, q int) {
 		[]asm.Type{asm.Ptr, asm.Ptr, asm.Ptr, asm.Int64}, nil, nil,
 	)
 	b := asm.NewFunc(name, sig, 32*r)
-	y := skEmit{c: c, b: b, w: "Y", last: r, addr: comp2LastAddr}
-	x := skEmit{c: c, b: b, w: "X", last: r, addr: comp2LastAddr}
+	y := skEmit{c: c, b: b, w: "Y", last: r, addr: comp2Addr}
+	x := skEmit{c: c, b: b, w: "X", last: r, addr: comp2Addr}
 	b.LoadArg("cc", "AX").LoadArg("ch", "BX").LoadArg("k", "R14").LoadArg("l1", "DX")
 	b.Raw("MOVQ DX, R9").
 		Raw("SHRQ $1, R9"). // block pairs

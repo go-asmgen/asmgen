@@ -23,7 +23,7 @@ import (
 //   - loong64's LSX exposes no vector float add/mul/FMA in the Go assembler,
 //   - ppc64le's VSX exposes no vector double arithmetic in the Go assembler,
 //
-// so all three keep the validated scalar fallback (see cmul_generic.go). s390x's
+// so all three keep the validated scalar fallback (see go-fft's cmul_generic.go). s390x's
 // vector facility DOES expose 2-wide double FMA (VFMADB / VFMSDB) and plain
 // multiply (VFMDB), so a bit-identical kernel is both expressible and validated
 // (the per-arch qemu job runs it).

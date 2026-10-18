@@ -8,10 +8,10 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// float32 (complex64) Stockham pass kernels, into stockham32_arm64.s.
+// float32 (complex64) Stockham pass kernels.
 //
-// sk32Pass<r>NEON[Inv](cc, ch, tw *complex64, ido, l1 int) and
-// sk32Last<r>NEON[Inv](cc, ch *complex64, l1 int) run the fft package's
+// Pass32's name(cc, ch, tw *complex64, ido, l1 int) and Last32's
+// name(cc, ch *complex64, l1 int) run go-fft's
 // float32 passes (stockham32_passes.go, f32Pass<r> and f32Pass<r>last) for
 // radix 2, 3, 4, 5 and 8, four points per register: VLD2 splits four
 // complex64 into a register of real parts and one of imaginary parts (.4S),
@@ -31,7 +31,7 @@ import (
 // Points are walked in groups of four (one .4S register pair), then a group
 // of two (VLD2/VST2 on .2S, the upper lanes zero) for ido&2 and a lone point
 // (FLDPS/FSTPS) for ido&1. Twiddles come in the same groups, one sequential
-// stream already split (kernels.StockhamTwiddles32 on arm64): for a group of
+// stream already split (go-fft's StockhamTwiddles32 on arm64): for a group of
 // g points and each j, the g real parts then the g imaginary parts, loaded
 // with VLD1 (FLDPS for a lone point). The point i = 0 is multiplied by w = 1
 // with its group and lane 0 of the untwiddled value put back (VMOV element).
@@ -306,7 +306,8 @@ func f32simdPassStep(b *asm.Builder, r int, in, out []string, inverse bool, st f
 	})
 }
 
-// genF32StockhamPass emits sk32Pass<r>NEON / sk32Pass<r>NEONInv (ido >= 2).
+// Pass32 emits name(cc, ch, tw *complex64, ido, l1 int), the float32 pass
+// (ido >= 2).
 func Pass32(f *emit.File, name string, r int, inverse bool) {
 	check("Pass32", r, 2, 3, 4, 5, 8)
 	sig := asm.Layout(
@@ -440,7 +441,7 @@ func f32simdLastLoad(b *asm.Builder, r int) {
 	}
 }
 
-// genF32StockhamLast emits sk32Last<r>NEON / sk32Last<r>NEONInv(cc, ch
+// Last32 emits name(cc, ch
 // *complex64, l1 int): the final pass (ido == 1) for l1 a multiple of four,
 // four blocks per iteration (f32simdLastLoad); output j of the four blocks,
 // ch[j·l1+k .. j·l1+k+3], is one VST2.

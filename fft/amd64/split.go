@@ -18,7 +18,7 @@ import (
 // [i0 i2 i1 i3]), one in-lane shuffle per register, and they undo it the
 // same way. Inside a pass the points of a block are independent, so the
 // order within the block does not matter as long as the twiddles are stored
-// in it too (kernels.StockhamSplitTwiddles).
+// in it too (go-fft's StockhamSplitTwiddles).
 //
 // With the parts apart, a YMM register holds one part of four points: the
 // ±i rotations are a choice of operands (no shuffle, no sign flip), and a
@@ -36,9 +36,9 @@ import (
 // multiplied by 1 with its group and then put back by a blend, as in the
 // interleaved kernels.
 //
-// Registers as in genStockhamAVX2: AX/SI inputs, BX/DI outputs, CX = S, DX =
+// Registers as in Pass: AX/SI inputs, BX/DI outputs, CX = S, DX =
 // OS, R12 = 3·S, R13 = 3·OS, R8 blocks left, R9 groups left, R10 twiddle
-// cursor, R15 twiddle base, R14 constants (kernels.splitConst).
+// cursor, R15 twiddle base, R14 constants (go-fft's splitConst).
 
 type splitEmit struct {
 	c         *Kernels

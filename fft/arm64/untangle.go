@@ -8,18 +8,16 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// float64 real-FFT untangle and its inverse (Round 27), into
-// untangle_arm64.s.
+// float64 real-FFT untangle and its inverse (Round 27).
 //
-// armrealUntangleNEON(dst, z, tw *complex128, m, pairs int) is the fft
-// package's rfftUntangle loop for bins k = 1 .. 2·pairs, and
+// Untangle's name(dst, z, tw *complex128, m, pairs int) is go-fft's rfftUntangle loop for bins k = 1 .. 2·pairs, and
 // armrealRetangleNEON(z, x, tw *complex128, h *float64, m, pairs int) its
-// irfftRetangle loop (retangle, inlined) for the same k: genF32rUntangle on
+// irfftRetangle loop (retangle, inlined) for the same k: Untangle32 on
 // .2D, two consecutive k per register pair. Z[k], Z[k+1] and the mirrored
 // Z[m-k-1], Z[m-k] are loaded as they lie (VLD1) and split into real and
 // imaginary parts by VZIP1/VZIP2, whose operand order also puts bin m-k-q in
 // lane q of the mirrors; the outputs are joined the same way before their
-// VST1. The twiddles come split from the table (kernels.UntangleTable:
+// VST1. The twiddles come split from the table (go-fft's UntangleTable:
 // wr_k, wr_k+1, wi_k, wi_k+1 per pair), so one VLD1 loads them with no
 // permute.
 //
@@ -156,7 +154,7 @@ func armrealStep(inverse bool, in, mir, tw, out, mout string) []armrealOp {
 // armrealUnroll is how many untangle steps one loop iteration interleaves.
 const armrealUnroll = 3
 
-// genArmrealUntangle emits armrealUntangleNEON, or armrealRetangleNEON when
+// Untangle emits the untangle kernel, or the retangle kernel when
 // inverse. R5 = &in[k], R7 = &out[k], R9 = &tw[k] (all post-incremented),
 // R6 = &in[m-k-1] and R8 = &out[m-k-1] for the first step of an iteration,
 // R11/R12 and R13/R14 the same 32 and 64 bytes lower for the next two, R4 =

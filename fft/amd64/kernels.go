@@ -96,3 +96,13 @@ func check(builder string, r int, radices ...int) {
 		panic(fmt.Sprintf("fft/amd64: %s: radix %d not in %v", builder, r, radices))
 	}
 }
+
+// fp addresses argument name of a kernel whose arguments, names, are all
+// eight bytes wide: name+8·i(FP).
+func fp(names []string, name string) string {
+	i := slices.Index(names, name)
+	if i < 0 {
+		panic(fmt.Sprintf("fft/amd64: no argument %s in %v", name, names))
+	}
+	return fmt.Sprintf("%s+%d(FP)", name, 8*i)
+}

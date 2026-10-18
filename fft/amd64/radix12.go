@@ -8,7 +8,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Radix-12 pass kernels (Round 24): the fft package's radix12.go, the
+// Radix-12 pass kernels (Round 24): go-fft's radix12.go, the
 // prime-factor algorithm for 12 = 3·4. Input n = (4·n1 + 3·n2) mod 12 and
 // output k = (4·k1 + 9·k2) mod 12: four radix-3 butterflies (one per n2, over
 // n1), then three radix-4 butterflies (one per k1, over n2), with no twiddle
@@ -169,7 +169,7 @@ func (c *Kernels) pass12(f *emit.File, name string) {
 }
 
 // last12 emits Last's radix-12 final pass (ido == 1), two
-// blocks per register as in genStockhamLastAVX2, an odd l1 finished by one
+// blocks per register as in Last, an odd l1 finished by one
 // 128-bit step.
 func (c *Kernels) last12(f *emit.File, name string) {
 	sig := asm.Layout(

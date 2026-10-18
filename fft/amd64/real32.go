@@ -1,8 +1,6 @@
 package amd64
 
 import (
-	"fmt"
-
 	asm "github.com/go-asmgen/asmgen/amd64"
 	"github.com/go-asmgen/asmgen/emit"
 )
@@ -29,17 +27,17 @@ import (
 // Batch32 emits name(cc, ch, tw *complex64, k *float32, ido, l1, quads, rem,
 // jin, jout, adjin, adjout int) (Round 25), r = 2, 3, 4, 5 or 8: one float32
 // Stockham pass of radix r over a batch of w = 4·quads + rem transforms laid
-// side by side, the strips of a non-contiguous N-D axis (the fft package's
-// skStage32.passBatch); genStockhamBatchAVX2 with single-precision registers.
+// side by side, the strips of a non-contiguous N-D axis (go-fft's
+// skStage32.passBatch); Batch with single-precision registers.
 // Point p of the batch is w neighbouring complex64 values, so four lines at
 // one point are one YMM register (then two in an XMM register for rem&2 and
 // one, VMOVSD, for rem&1), and every lane runs exactly the arithmetic of the
-// 1-D float32 kernels (genF32StockhamAVX2) on one line: the same butterflies,
+// 1-D float32 kernels (Pass32) on one line: the same butterflies,
 // the same twiddle product. A point's twiddle is the same for every line,
 // broadcast with VBROADCASTSS from the batched table (for i = 1 .. ido-1, the
 // r-1 twiddles of point i); point i = 0 is not multiplied, as in the Go pass.
 //
-// Registers as genF32StockhamAVX2's, with CX = jin = 8·ido·sIn (one input
+// Registers as Pass32's, with CX = jin = 8·ido·sIn (one input
 // stream), DX = jout = 8·l1·ido·sOut; each row (one point) advances the
 // streams by 8·w, then by adjin = 8·(sIn-w) and adjout = 8·(sOut-w).
 func (c *Kernels) Batch32(f *emit.File, name string, r int) {
@@ -50,14 +48,7 @@ func (c *Kernels) Batch32(f *emit.File, name string, r int) {
 		types = append(types, asm.Int64)
 	}
 	sig := asm.Layout(names, types, nil, nil)
-	arg := func(name string) string {
-		for _, p := range sig.Args {
-			if p.Name == name {
-				return fmt.Sprintf("%s+%d(FP)", name, p.Offset)
-			}
-		}
-		panic(name)
-	}
+	arg := func(n string) string { return fp(names, n) }
 	b := asm.NewFunc(name, sig, 0)
 	b.LoadArg("cc", "AX").LoadArg("ch", "BX").LoadArg("tw", "R15").LoadArg("k", "R14").
 		LoadArg("jin", "CX").LoadArg("jout", "DX").LoadArg("l1", "R8")

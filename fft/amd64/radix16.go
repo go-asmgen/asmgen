@@ -8,7 +8,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Radix-16 Stockham passes (the fft package's radix16.go, Round 19).
+// Radix-16 Stockham passes (go-fft's radix16.go, Round 19).
 //
 // The 16-point butterfly is the 4×4 split of bfly16, the algorithm of FFTW's
 // n1fv_16/t1fv_16 codelets: four radix-4 butterflies over the inputs n2,
@@ -33,7 +33,7 @@ import (
 // which is reloaded from the arguments at each block.
 //
 // There is no AVX-512 radix-16 kernel: none could be verified on hardware
-// this round, and the fft package does not factor with radix 16 where the
+// this round, and go-fft does not factor with radix 16 where the
 // AVX-512 kernels run.
 
 const (

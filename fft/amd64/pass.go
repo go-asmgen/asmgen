@@ -296,7 +296,7 @@ func (e skEmit) twStore(y, j, t1, t2, t3, dst int, first bool) {
 //
 //	re = fma(yr, wr, −(yi·wi)),  im = fma(yi, wr, yr·wi)
 //
-// the fft package's cmulFMA, the product every FMA kernel and its Go
+// go-fft's cmulFMA, the product every FMA kernel and its Go
 // reference compute. VFMADDSUB231PD exists at 512 bits (AVX512F), so the
 // AVX-512 kernels need no sign flip where VADDSUBPD has no 512-bit form.
 func (e skEmit) fmaProduct(y int, wr, wi string, sw, dst int) {
@@ -765,14 +765,7 @@ func (c *Kernels) strided(f *emit.File, name string, r int, wide bool) {
 		types = append(types, asm.Int64)
 	}
 	sig := asm.Layout(names, types, nil, nil)
-	arg := func(name string) string {
-		for _, p := range sig.Args {
-			if p.Name == name {
-				return fmt.Sprintf("%s+%d(FP)", name, p.Offset)
-			}
-		}
-		panic(name)
-	}
+	arg := func(n string) string { return fp(names, n) }
 	b := asm.NewFunc(name, sig, 0)
 	// One four-point group: a ZMM register, or two YMM pairs.
 	group := func(first bool) {
@@ -864,14 +857,7 @@ func (c *Kernels) Batch(f *emit.File, name string, r int) {
 		types = append(types, asm.Int64)
 	}
 	sig := asm.Layout(names, types, nil, nil)
-	arg := func(name string) string {
-		for _, p := range sig.Args {
-			if p.Name == name {
-				return fmt.Sprintf("%s+%d(FP)", name, p.Offset)
-			}
-		}
-		panic(name)
-	}
+	arg := func(n string) string { return fp(names, n) }
 	b := asm.NewFunc(name, sig, 0)
 	y0, x0 := skEmit{c: c, b: b, w: "Y", notw: true}, skEmit{c: c, b: b, w: "X", notw: true}
 	yt, xt := skEmit{c: c, b: b, w: "Y", bcast: true}, skEmit{c: c, b: b, w: "X", bcast: true}

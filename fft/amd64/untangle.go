@@ -337,24 +337,13 @@ func (c *Kernels) Untangle512(f *emit.File, name, tail string, inverse bool) {
 	b.Raw("rest:").
 		Raw("MOVQ R8, R11").Raw("SHLQ $6, R11")
 	for _, p := range names[:3] {
-		b.LoadArg(p, "AX").Raw("ADDQ R11, AX").Raw("MOVQ AX, %s+%d(FP)", p, 8*slicesIndex(names, p))
+		b.LoadArg(p, "AX").Raw("ADDQ R11, AX").Raw("MOVQ AX, %s", fp(names, p))
 	}
 	b.LoadArg("m", "AX").
 		Raw("MOVQ R8, R11").Raw("SHLQ $3, R11").
-		Raw("SUBQ R11, AX").Raw("MOVQ AX, m+%d(FP)", 8*slicesIndex(names, "m")).
+		Raw("SUBQ R11, AX").Raw("MOVQ AX, %s", fp(names, "m")).
 		LoadArg("pairs", "AX").
-		Raw("SUBQ R8, AX").Raw("SUBQ R8, AX").Raw("MOVQ AX, quads+%d(FP)", 8*slicesIndex(names, "quads")).
+		Raw("SUBQ R8, AX").Raw("SUBQ R8, AX").Raw("MOVQ AX, %s", fp(names, "quads")).
 		Raw("JMP ·%s(SB)", tail)
 	f.Add(b.Func())
-}
-
-// slicesIndex is the position of s in names (Round 37's tail jump in
-// Untangle512).
-func slicesIndex(names []string, s string) int {
-	for i, n := range names {
-		if n == s {
-			return i
-		}
-	}
-	panic(s)
 }

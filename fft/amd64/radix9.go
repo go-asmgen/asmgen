@@ -151,7 +151,7 @@ func (c *Kernels) pass9(f *emit.File, name string) {
 }
 
 // last9 emits Last's radix-9 final pass (ido == 1), two
-// blocks per register as in genStockhamLastAVX2, an odd l1 finished by one
+// blocks per register as in Last, an odd l1 finished by one
 // 128-bit step.
 func (c *Kernels) last9(f *emit.File, name string) {
 	sig := asm.Layout(

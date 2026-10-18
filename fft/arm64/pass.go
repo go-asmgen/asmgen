@@ -39,7 +39,7 @@ import (
 //   - Radix 8 computes its ∓45°/∓135° rotations unscaled and fuses their
 //     √2/2 into the final add or subtract (see bfly8).
 //
-// Twiddles are read from one sequential stream (kernels.StockhamTwiddles on
+// Twiddles are read from one sequential stream (go-fft's StockhamTwiddles on
 // arm64), already split: for each pair of points i, i+1 and each j, the four
 // float64 re(w_j(i)) re(w_j(i+1)) im(w_j(i)) im(w_j(i+1)), so a VLD1 loads
 // them as they are used. The pair i = 0, 1 is multiplied with w(0) = 1 like the
@@ -345,7 +345,7 @@ func passStep(b *asm.Builder, r int, in, out []string, inverse bool, st step) {
 	})
 }
 
-// genStockhamPass emits skPass<r>NEON / skPass<r>NEONInv(cc, ch, tw
+// Pass emits name(cc, ch, tw
 // *complex128, ido, l1 int): the radix-r pass for ido >= 2.
 func Pass(f *emit.File, name string, r int, inverse bool) {
 	check("Pass", r, 2, 3, 4, 5, 8)
@@ -401,7 +401,7 @@ func Pass(f *emit.File, name string, r int, inverse bool) {
 	f.Add(b.Func())
 }
 
-// genStockhamLast emits skLast<r>NEON / skLast<r>NEONInv(cc, ch *complex128,
+// Last emits name(cc, ch *complex128,
 // l1 int): the radix-r final pass (ido == 1), two blocks per iteration, and
 // for an odd l1 one block alone at the end (compLastTail). Block k is the r
 // points cc[r·k .. r·k+r-1]; two blocks are loaded as they lie (VLD1 into
@@ -455,7 +455,7 @@ func Last(f *emit.File, name string, r int, inverse bool) {
 	f.Add(b.Func())
 }
 
-// compLastLoad8 loads and pairs two radix-8 blocks for genStockhamLast. The
+// compLastLoad8 loads and pairs two radix-8 blocks for Last. The
 // 16 points of blocks k and k+1 would need 16 registers beside the 16 the
 // butterfly reads, and V18 holds √2/2, so they come in halves: block k's
 // points 0-3 into V20-V23 and 4-7 into V24-V27, block k+1's points 0-3 into
@@ -476,7 +476,7 @@ func compLastLoad8(b *asm.Builder) {
 	}
 }
 
-// compLastTail emits the end of genStockhamLast's final pass for an odd l1:
+// compLastTail emits the end of Last's final pass for an odd l1:
 // the last block alone. Its r points are loaded as they lie (VLD1, one
 // complex128 per register) and each is paired with itself, so both lanes of
 // V(2j), V(2j+1) hold point j and run the same arithmetic; lane 0 of every
@@ -511,7 +511,7 @@ func compLastTail(b *asm.Builder, r int, inverse bool, out []string) {
 	b.Label("done")
 }
 
-// genStockhamBatchNEON emits skBatch<r>NEON / skBatch<r>NEONInv(cc, ch, tw
+// Batch emits name(cc, ch, tw
 // *complex128, ido, l1, pairs, odd, jin, jout, adjin, adjout int): one
 // Stockham pass of radix r over a batch of w = 2·pairs + odd transforms laid
 // side by side, the strips of a non-contiguous N-D axis (stockham.go's
@@ -652,7 +652,7 @@ func batchStepNEON(b *asm.Builder, r int, in, out []string, inverse, twiddled, s
 // deinterleave, and every address is unchanged. The first pass of a transform
 // reads its input interleaved and writes split (out), the passes between read
 // and write split (in, out), and the last reads split and writes interleaved
-// (genStockhamLastSplit), so the caller sees only interleaved data. The
+// (LastSplit), so the caller sees only interleaved data. The
 // arithmetic is that of the interleaved kernels, instruction for instruction,
 // so the results are the same bits.
 //
@@ -692,8 +692,8 @@ func splitPassStep(b *asm.Builder, r int, in, out []string, inverse bool, first 
 	})
 }
 
-// genStockhamPassSplit emits skPass<r>NEON<IS|SS> and the Inv forms (cc, ch,
-// tw *complex128, ido, l1 int): genStockhamPass's radix-r pass, for an even
+// PassSplit emits name(cc, ch, tw *complex128, ido, l1 int): Pass's
+// radix-r pass, writing split (reading split too when inSplit), for an even
 // ido, with the layout's loads and stores.
 func PassSplit(f *emit.File, name string, r int, inverse, inSplit bool) {
 	check("PassSplit", r, 2, 3, 4, 5, 8)
@@ -738,8 +738,8 @@ func PassSplit(f *emit.File, name string, r int, inverse, inSplit bool) {
 	f.Add(b.Func())
 }
 
-// genStockhamLastSplit emits skLast<r>NEONSI / skLast<r>NEONInvSI(cc, ch
-// *complex128, l1 int): genStockhamLast's final pass, reading block-split
+// LastSplit emits name(cc, ch *complex128, l1 int): Last's final pass
+// (r = 2, 4 or 8), reading block-split
 // input. Blocks k and k+1 are the 2r points from r·k, r pairs loaded as they
 // lie into V(t+2q) (real parts of pair q) and V(t+2q+1) (imaginary parts).
 // Point j of block k is lane j%2 of pair j/2, and of block k+1 the same lane of
@@ -790,16 +790,16 @@ func LastSplit(f *emit.File, name string, r int, inverse bool) {
 	f.Add(b.Func())
 }
 
-// compSplitBlockStep emits, for genStockhamPassSplit's radix 3 and 5, R4 =
+// compSplitBlockStep emits, for PassSplit's radix 3 and 5, R4 =
 // r·ido·16 (one input block) and returns the advance to the next block, as
-// genStockhamPass does for the radices that are not powers of two.
+// Pass does for the radices that are not powers of two.
 func compSplitBlockStep(b *asm.Builder, r int) string {
 	b.Raw("MOVD $%d, R4", r).Raw("MUL R4, R16, R4")
 	return "ADD R4, R19, R19"
 }
 
 // compSplitLoad8 loads and pairs two block-split radix-8 blocks for
-// genStockhamLastSplit, in halves as compLastLoad8 does: block k's pairs 0-3
+// LastSplit, in halves as compLastLoad8 does: block k's pairs 0-3
 // into V20-V27 and block k+1's pairs 0 and 1 into V28-V31, points 0-3 of both
 // paired into V0-V7; then block k+1's pairs 2 and 3 into the freed V20-V23,
 // points 4-7 paired into V8-V15. Point j is lane j%2 of pair j/2.
@@ -824,7 +824,7 @@ func compSplitLoad8(b *asm.Builder) {
 	}
 }
 
-// compSplitTail emits the end of genStockhamLastSplit's final pass for an
+// compSplitTail emits the end of LastSplit's final pass for an
 // odd l1: the last block alone, its r/2 pairs loaded as they lie into V20 on,
 // point j (lane j%2 of pair j/2) paired with itself into both lanes of V(2j),
 // V(2j+1), and lane 0 of every output stored with FSTPD, as compLastTail does.

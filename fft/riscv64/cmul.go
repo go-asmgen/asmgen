@@ -53,7 +53,7 @@ import (
 //
 // Soundness / why this kernel cannot crash CI. The V extension is OPTIONAL on
 // riscv64 and is absent from the default qemu-riscv64 CPU the CI arch-qemu job
-// runs (VSETVLI would SIGILL there). The dispatch (cmul_riscv64.go) therefore
+// runs (VSETVLI would SIGILL there). go-fft's dispatch (cmul_riscv64.go) therefore
 // probes for V at run time (parsing /proc/cpuinfo) and calls cmulRVV ONLY when V
 // is present; under CI's non-V qemu it takes the scalar path, and the
 // SIMD-vs-scalar test SKIPs its RVV comparison. On real RVV hardware (cfarm95,

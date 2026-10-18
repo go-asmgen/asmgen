@@ -6,10 +6,9 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// float32 real-FFT untangle and its inverse (Round 25), into
-// untangle32_arm64.s.
+// float32 real-FFT untangle and its inverse (Round 25).
 //
-// f32rUntangleNEON(dst, z, tw *complex64, m, quads int) is the fft package's
+// Untangle32's name(dst, z, tw *complex64, m, quads int) is go-fft's
 // f32Untangle for bins k = 1 .. 4·quads, and f32rRetangleNEON(z, x, tw
 // *complex64, h *float32, m, quads int) its f32Retangle loop for the same k,
 // four consecutive k per .4S register pair: VLD2 splits Z[k .. k+3] into real
@@ -36,9 +35,9 @@ import (
 // operation, signed zeros included (VFMLS would give −(c − p), the other
 // zero). The tests compare kernel and Go loop bit for bit.
 
-// genF32rBatchNEON emits sk32Batch<r>NEON / sk32Batch<r>NEONInv(cc, ch, tw
+// Batch32 emits name(cc, ch, tw
 // *complex64, ido, l1, quads, rem, jin, jout, adjin, adjout int) (Round 25):
-// genStockhamBatchNEON in single precision, one float32 Stockham pass of
+// Batch in single precision, one float32 Stockham pass of
 // radix r over w = 4·quads + rem transforms side by side. Four lines at one
 // point are one VLD2 on .4S (two on .2S for rem&2, one FLDPS for rem&1), and
 // every lane runs the arithmetic of the 1-D float32 kernels
@@ -46,7 +45,7 @@ import (
 // for every line, is loaded already broadcast and split by VLD2R from the
 // batched table (for i = 1 .. ido-1, the r-1 twiddles of point i); point
 // i = 0 is not multiplied. Streams, counters and row steps as
-// genStockhamBatchNEON's, with 8-byte values: jin = 8·ido·sIn, jout =
+// Batch's, with 8-byte values: jin = 8·ido·sIn, jout =
 // 8·l1·ido·sOut, adjin = 8·(sIn-w), adjout = 8·(sOut-w).
 func Batch32(f *emit.File, name string, r int, inverse bool) {
 	check("Batch32", r, 2, 3, 4, 5, 8)
@@ -155,7 +154,8 @@ func f32rRev(b *asm.Builder, v int) {
 		Raw("VEXT $8, V%d.B16, V%d.B16, V%d.B16", v, v, v)
 }
 
-// genF32rUntangle emits f32rUntangleNEON, or f32rRetangleNEON when inverse.
+// Untangle32 emits the float32 untangle kernel, or the retangle kernel when
+// inverse.
 // R5 = &in[k], R6 = &in[m-k-3], R7 = &out[k], R8 = &out[m-k-3], R9 = &tw[k],
 // R4 = groups left; V31 = 0.5 (or h).
 func Untangle32(f *emit.File, name string, inverse bool) {

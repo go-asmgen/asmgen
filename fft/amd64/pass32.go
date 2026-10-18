@@ -8,13 +8,13 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// float32 (complex64) Stockham pass kernels, into stockham32_amd64.s.
+// float32 (complex64) Stockham pass kernels.
 //
-// sk32Pass{r}AVX2(cc, ch, tw *complex64, k *float32, ido, l1 int) and
-// sk32Last{r}AVX2(cc, ch *complex64, k *float32, l1 int) are the float32
-// passes of the fft package's stockham32_passes.go (f32Pass{r},
-// f32Pass{r}last) for radix 2, 3, 4, 5 and 8. They are genStockhamAVX2 and
-// genStockhamLastAVX2 with single-precision instructions: a complex64 is 8
+// Pass32's name(cc, ch, tw *complex64, k *float32, ido, l1 int) and Last32's
+// name(cc, ch *complex64, k *float32, l1 int) are the float32 passes of
+// go-fft's stockham32_passes.go (f32Pass{r},
+// f32Pass{r}last) for radix 2, 3, 4, 5 and 8. They are Pass and
+// Last with single-precision instructions: a complex64 is 8
 // bytes, so a YMM register holds four points and an XMM register two. They are
 // kept apart from the float64 emitter (f32simdEmit, not skEmit) so a change to
 // either family cannot move the other's arithmetic.
@@ -31,7 +31,7 @@ import (
 // then blended back (VBLENDPS $3): a multiply by one is not exact on signed
 // zeros.
 //
-// Points are walked in twiddle groups (kernels.StockhamTwiddles32 on amd64):
+// Points are walked in twiddle groups (go-fft's StockhamTwiddles32 on amd64):
 // groups of four points in a YMM register, then one of two in an XMM register
 // for ido&2 and one of one for ido&1, loaded and stored with VMOVSD (8 bytes)
 // and computed in an XMM register whose upper lanes are zero. A group of g
@@ -42,7 +42,7 @@ import (
 // at the offsets of the float64 table (e.c.K.Sign … e.c.K.H), each constant rounded once
 // to float32 as the Go passes' untyped constants are.
 //
-// Registers as genStockhamAVX2's, with S = ido·8 and OS = l1·ido·8.
+// Registers as Pass's, with S = ido·8 and OS = l1·ido·8.
 
 type f32simdEmit struct {
 	c    *Kernels
