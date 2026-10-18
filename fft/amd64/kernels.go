@@ -2,7 +2,8 @@
 // on top of go-asmgen's amd64 builder: Stockham passes of radix 2, 3, 4, 5, 8,
 // 9, 10, 12, 15, 16 and 20 in the interleaved layout (SSE2 stages, AVX2 and
 // AVX-512 passes, batched and strided passes), the split layouts at 256 and
-// 512 bits, float32 passes, the real-FFT untangle and retangle, pointwise
+// 512 bits, radix-32 passes with fused products (SplitR32, LastR32), float32
+// passes, the real-FFT untangle and retangle, pointwise
 // complex products, and the stack-frame trampolines that run two or three
 // passes in one call.
 //

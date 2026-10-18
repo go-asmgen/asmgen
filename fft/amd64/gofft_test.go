@@ -212,6 +212,15 @@ func goFFTFiles() map[string]string {
 	kf.LastR32(f, "skLast32AVX2FMA", false)
 	kf.LastR32(f, "skLast32AVX512FMA", true)
 	files["r32fma_amd64.s"] = f.String()
+
+	f = emit.NewFile("amd64")
+	forSplits(func(inS, outS, inverse bool) {
+		kf.SplitR32InFrame(f, splitName("skSplit", 32, inS, outS, inverse)+"FMAF", false, inS, outS, inverse)
+	})
+	forSplits(func(inS, outS, inverse bool) {
+		kf.SplitR32InFrame(f, splitName("intelSplit512R", 32, inS, outS, inverse)+"FMAF", true, inS, outS, inverse)
+	})
+	files["r32frame_amd64.s"] = Funcdata(f.String())
 	return files
 }
 

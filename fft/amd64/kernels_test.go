@@ -53,7 +53,11 @@ var golden = map[string]func(f *emit.File){
 	"split_r32_is_fma":    func(f *emit.File) { goFFTFMA.SplitR32(f, "split32", false, false, true, false) },
 	"split512_r32_si_fma": func(f *emit.File) { goFFTFMA.SplitR32(f, "split32", true, true, false, true) },
 	"last_r32_fma":        func(f *emit.File) { goFFTFMA.LastR32(f, "last32", false) },
-	"last512_r32_fma":     func(f *emit.File) { goFFTFMA.LastR32(f, "last32", true) },
+	"split_r32_ss_frame":  func(f *emit.File) { goFFTFMA.SplitR32InFrame(f, "split32", false, true, true, false) },
+	"split512_r32_ii_frame": func(f *emit.File) {
+		goFFTFMA.SplitR32InFrame(f, "split32", true, false, false, true)
+	},
+	"last512_r32_fma": func(f *emit.File) { goFFTFMA.LastR32(f, "last32", true) },
 }
 
 func TestGolden(t *testing.T) {

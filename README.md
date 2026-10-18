@@ -226,7 +226,7 @@ one package per architecture, on top of the builders above:
 
 | package | kernels |
 |---|---|
-| [`fft/amd64`](fft/amd64) | Stockham passes of radix 2, 3, 4, 5, 8, 9, 10, 12, 15, 16 and 20 (AVX2), and of radix 2, 4 and 8 at 512 bits; final passes, batched, strided and run-writing passes; the split layouts at 256 and 512 bits; float32 passes; the real-FFT untangle and retangle; SSE2 and AVX2 complex products; the two- and three-pass stack-frame trampolines and their address table |
+| [`fft/amd64`](fft/amd64) | Stockham passes of radix 2, 3, 4, 5, 8, 9, 10, 12, 15, 16 and 20 (AVX2), and of radix 2, 4 and 8 at 512 bits; final passes, batched, strided and run-writing passes; the split layouts at 256 and 512 bits; radix-32 passes with fused multiply-adds (split layout at 256 and 512 bits, with the values between their stages in the output or in their frame, and the interleaved final pass); float32 passes; the real-FFT untangle and retangle; SSE2 and AVX2 complex products; the two- and three-pass stack-frame trampolines and their address table |
 | [`fft/arm64`](fft/arm64) | NEON Stockham passes of radix 2, 3, 4, 5 and 8 in float64 and float32 (pass, final pass, batched pass, block-split layout); the untangle and retangle; the complex product |
 | [`fft/riscv64`](fft/riscv64), [`fft/s390x`](fft/s390x) | the RVV and vector-facility complex products |
 
