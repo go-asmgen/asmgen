@@ -131,6 +131,23 @@ the same way (70 cases, GNU as 2.44 and `llvm-mc` agreeing). go-ndarray's
 float32 pairwise-sum block runs on `XVADDSP` and matches the scalar loop bit
 for bit on a POWER9.
 
+**s390x vector float32 arithmetic the Go assembler lacks**: `cmd/asm` has the
+float64 forms (`VFADB`, `WFADB`, `VFMADB`, ...) but not the float32 ones added
+by the vector-enhancements facility 1 (z14). `Builder.VFASB`, `VFSSB`, `VFMSB`,
+`VFDSB`, `VFMASB`, `VFMSSB` (both fused) and `VFSQSB` work on four float32
+lanes, and `WFASB` ... `WFSQSB` on element 0 only. Operands are vector registers
+0–31 in ISA order, the target first: `b.VFASB(3, 1, 2)` is V3 = V1 + V2. The
+instructions are 6 bytes long. Each one is emitted on a single line as
+`WORD $0x<bytes 0–3>; BYTE $0x<byte 4>; BYTE $0x<byte 5>`, with the spelling from
+[CL 846286](https://go.dev/cl/846286) as its comment. `cmd/asm` writes these
+directives big-endian and without padding. The encodings are pinned against
+GNU as 2.42 on an IBM z with vxe/vxe2 (126 cases, every register field at 0,
+15, 16 and 31, so the RXB bits are covered). `llvm-mc` 23 agrees on every case.
+Kernels emitted by these methods were run on that machine, with operands in
+V5, V17, V30 and the result in V20. They matched Go's scalar float32
+arithmetic, `math.Sqrt` and an exactly rounded fused reference bit for bit, over
+8.4M lanes. A caller must check `cpu.S390X.HasVXE` before using them.
+
 **loong64 LSX/LASX fused multiply-add and broadcast load**:
 `Builder.XVFMADDD`/`VFMADDD` (fused, four/two lanes) are `WORD`s, because
 `cmd/asm` has no vector float FMA (`VMADDV`/`XVMADDV` are the integer ones).

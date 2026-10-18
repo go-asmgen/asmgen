@@ -109,8 +109,8 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           # The independent references (verify builds cmd/asm from source).
           # Only architectures the registry holds references for; a CL for an
-          # instruction go-asmgen does not emit (s390x .SB) is covered by Go's
-          # own tests above.
+          # architecture without registry entries is covered by Go's own
+          # tests above.
           for arch in $arches; do
             if "$RUNNER_TEMP/goasmgap" testdata -arch "$arch" >/dev/null 2>&1; then
               "$RUNNER_TEMP/goasmgap" verify -goroot "$RUNNER_TEMP/gomaster" -arch "$arch" -require

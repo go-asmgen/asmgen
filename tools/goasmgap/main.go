@@ -116,7 +116,9 @@ func testdata(w io.Writer, a *gap.Arch) {
 	}
 }
 
-var encodingComment = regexp.MustCompile(`//\s*([0-9a-f]{8})\s*$`)
+// encodingComment finds the encoding a test line ends with: 8 hex digits, or
+// 12 for a 6-byte s390x instruction. ParseHex keeps those of the family's size.
+var encodingComment = regexp.MustCompile(`//\s*([0-9a-f]{8}|[0-9a-f]{12})\s*$`)
 
 // scan reads the test data of a Go tree and reports every line whose
 // encoding is one of the registry's instructions: the spelling Go already
@@ -166,7 +168,10 @@ func scanFile(path string, a *gap.Arch, hits map[*gap.Insn][]string) error {
 		if m == nil {
 			continue
 		}
-		word, _ := a.ParseHex(m[1]) // the pattern admits only valid hex
+		word, err := a.ParseHex(m[1])
+		if err != nil {
+			continue // another length: s390x.s also holds 4-byte instructions
+		}
 		for _, in := range a.Insns() {
 			if word&in.Mask == in.Bits {
 				insn := strings.Join(strings.Fields(line[:strings.Index(line, "//")]), " ")
@@ -221,7 +226,7 @@ func (tc toolchain) run(goarch, name string, args ...string) ([]byte, error) {
 
 // assemble returns the words of the instructions in lines, in order, or the
 // assembler's complaint.
-func (tc toolchain) assemble(goarch string, lines []string) ([]uint32, error) {
+func (tc toolchain) assemble(goarch string, lines []string) ([]uint64, error) {
 	dir, err := os.MkdirTemp("", "goasmgap")
 	if err != nil {
 		return nil, err
@@ -247,20 +252,22 @@ func (tc toolchain) assemble(goarch string, lines []string) ([]uint32, error) {
 	return objdumpWords(string(out))
 }
 
-// objdumpWords reads the instruction words from go tool objdump, which
-// prints each as a 32-bit value whatever the target's byte order.
-func objdumpWords(out string) ([]uint32, error) {
-	var words []uint32
+// objdumpWords reads the instruction encodings from go tool objdump, which
+// prints each as one hex number whatever the target's byte order: 32 bits on
+// ppc64 and loong64; on s390x, the instruction's 2, 4 or 6 bytes in memory
+// order.
+func objdumpWords(out string) ([]uint64, error) {
+	var words []uint64
 	for _, line := range strings.Split(out, "\n") {
 		f := strings.Fields(line)
 		if len(f) < 4 || !strings.HasPrefix(f[1], "0x") {
 			continue
 		}
-		v, err := strconv.ParseUint(f[2], 16, 32)
-		if err != nil || len(f[2]) != 8 {
+		v, err := strconv.ParseUint(f[2], 16, 64)
+		if err != nil || len(f[2])%2 != 0 || len(f[2]) < 4 || len(f[2]) > 12 {
 			return nil, fmt.Errorf("objdump: unexpected line %q", line)
 		}
-		words = append(words, uint32(v))
+		words = append(words, v)
 	}
 	return words, nil
 }
@@ -353,5 +360,5 @@ func classify(tc assembler, goarch string, in *gap.Insn) (status, detail string,
 
 // assembler is what classify needs from a toolchain; tests substitute one.
 type assembler interface {
-	assemble(goarch string, lines []string) ([]uint32, error)
+	assemble(goarch string, lines []string) ([]uint64, error)
 }

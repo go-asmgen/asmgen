@@ -17,7 +17,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvadddp", Plan9: "XVADDDP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 96<<3,
-		Encode: func(ops ...int) uint32 { return xx3(96, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(96, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf0000300},    // xvadddp vs0,vs0,vs0
@@ -34,7 +34,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvsubdp", Plan9: "XVSUBDP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 104<<3,
-		Encode: func(ops ...int) uint32 { return xx3(104, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(104, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf0000340},    // xvsubdp vs0,vs0,vs0
@@ -51,7 +51,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvmuldp", Plan9: "XVMULDP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 112<<3,
-		Encode: func(ops ...int) uint32 { return xx3(112, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(112, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf0000380},    // xvmuldp vs0,vs0,vs0
@@ -68,7 +68,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvdivdp", Plan9: "XVDIVDP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 120<<3,
-		Encode: func(ops ...int) uint32 { return xx3(120, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(120, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf00003c0},    // xvdivdp vs0,vs0,vs0
@@ -85,7 +85,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvmaddadp", Plan9: "XVMADDADP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 97<<3,
-		Encode: func(ops ...int) uint32 { return xx3(97, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(97, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf0000308},    // xvmaddadp vs0,vs0,vs0
@@ -102,7 +102,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvmaxdp", Plan9: "XVMAXDP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 224<<3,
-		Encode: func(ops ...int) uint32 { return xx3(224, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(224, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf0000700},    // xvmaxdp vs0,vs0,vs0
@@ -119,7 +119,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvmindp", Plan9: "XVMINDP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 232<<3,
-		Encode: func(ops ...int) uint32 { return xx3(232, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(232, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf0000740},    // xvmindp vs0,vs0,vs0
@@ -136,7 +136,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvsqrtdp", Plan9: "XVSQRTDP VS{1}, VS{0}",
 		Mask: 0xfc0007fc, Bits: 60<<26 | 203<<2,
-		Encode: func(ops ...int) uint32 { return xx2(203, ops[0], ops[1]) },
+		Encode: func(ops ...int) uint64 { return xx2(203, ops[0], ops[1]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0}, 0xf000032c},   // xvsqrtdp vs0,vs0
@@ -157,7 +157,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvaddsp", Plan9: "XVADDSP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 64<<3,
-		Encode: func(ops ...int) uint32 { return xx3(64, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(64, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf0000200},    // xvaddsp vs0,vs0,vs0
@@ -175,7 +175,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvsubsp", Plan9: "XVSUBSP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 72<<3,
-		Encode: func(ops ...int) uint32 { return xx3(72, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(72, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf0000240},    // xvsubsp vs0,vs0,vs0
@@ -193,7 +193,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvmulsp", Plan9: "XVMULSP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 80<<3,
-		Encode: func(ops ...int) uint32 { return xx3(80, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(80, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf0000280},    // xvmulsp vs0,vs0,vs0
@@ -211,7 +211,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvdivsp", Plan9: "XVDIVSP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 88<<3,
-		Encode: func(ops ...int) uint32 { return xx3(88, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(88, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf00002c0},    // xvdivsp vs0,vs0,vs0
@@ -229,7 +229,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvmaddasp", Plan9: "XVMADDASP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 65<<3,
-		Encode: func(ops ...int) uint32 { return xx3(65, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(65, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf0000208},    // xvmaddasp vs0,vs0,vs0
@@ -247,7 +247,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvmaxsp", Plan9: "XVMAXSP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 192<<3,
-		Encode: func(ops ...int) uint32 { return xx3(192, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(192, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf0000600},    // xvmaxsp vs0,vs0,vs0
@@ -265,7 +265,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvminsp", Plan9: "XVMINSP VS{1}, VS{2}, VS{0}",
 		Mask: 0xfc0007f8, Bits: 60<<26 | 200<<3,
-		Encode: func(ops ...int) uint32 { return xx3(200, ops[0], ops[1], ops[2]) },
+		Encode: func(ops ...int) uint64 { return xx3(200, ops[0], ops[1], ops[2]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0, 0}, 0xf0000640},    // xvminsp vs0,vs0,vs0
@@ -283,7 +283,7 @@ func init() {
 	a.insns = append(a.insns, &Insn{
 		Arch: "ppc64", ISA: "xvsqrtsp", Plan9: "XVSQRTSP VS{1}, VS{0}",
 		Mask: 0xfc0007fc, Bits: 60<<26 | 139<<2,
-		Encode: func(ops ...int) uint32 { return xx2(139, ops[0], ops[1]) },
+		Encode: func(ops ...int) uint64 { return xx2(139, ops[0], ops[1]) },
 		Source: ppc64Source,
 		Golden: []Case{
 			{[]int{0, 0}, 0xf000022c},   // xvsqrtsp vs0,vs0
@@ -300,15 +300,15 @@ func init() {
 
 // xx3 encodes a Power ISA XX3-form instruction: opcode 60, T/A/B low five
 // bits in 6–20, an 8-bit XO, then the high bits AX, BX, TX.
-func xx3(xo uint32, t, a, b int) uint32 {
+func xx3(xo uint64, t, a, b int) uint64 {
 	T, A, B := vsr(t), vsr(a), vsr(b)
 	return 60<<26 | T&31<<21 | A&31<<16 | B&31<<11 | xo<<3 | A>>5<<2 | B>>5<<1 | T>>5
 }
 
 // xx2 encodes an XX2-form instruction: no A, a 9-bit XO.
-func xx2(xo uint32, t, b int) uint32 {
+func xx2(xo uint64, t, b int) uint64 {
 	T, B := vsr(t), vsr(b)
 	return 60<<26 | T&31<<21 | B&31<<11 | xo<<2 | B>>5<<1 | T>>5
 }
 
-func vsr(r int) uint32 { return reg("ppc64", "VSX", r, 63) }
+func vsr(r int) uint64 { return reg("ppc64", "VSX", r, 63) }

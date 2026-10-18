@@ -13,10 +13,10 @@ import (
 )
 
 // fake assembles from a table: a line it does not know is refused.
-type fake map[string]uint32
+type fake map[string]uint64
 
-func (f fake) assemble(_ string, lines []string) ([]uint32, error) {
-	var words []uint32
+func (f fake) assemble(_ string, lines []string) ([]uint64, error) {
+	var words []uint64
 	for _, l := range lines {
 		w, ok := f[l]
 		if !ok {
@@ -78,15 +78,15 @@ func TestClassifyCaseByCase(t *testing.T) {
 
 type short struct{}
 
-func (short) assemble(string, []string) ([]uint32, error) { return []uint32{1}, nil }
+func (short) assemble(string, []string) ([]uint64, error) { return []uint64{1}, nil }
 
 // fake and the others return no word for an empty function; verify's
 // preflight needs the RET a real assembler would give.
 type withRET struct{ assembler }
 
-func (r withRET) assemble(goarch string, lines []string) ([]uint32, error) {
+func (r withRET) assemble(goarch string, lines []string) ([]uint64, error) {
 	if len(lines) == 0 {
-		return []uint32{0x4e800020}, nil
+		return []uint64{0x4e800020}, nil
 	}
 	return r.assembler.assemble(goarch, lines)
 }
@@ -125,7 +125,7 @@ func TestVerify(t *testing.T) {
 
 type empty struct{}
 
-func (empty) assemble(_ string, lines []string) ([]uint32, error) {
+func (empty) assemble(_ string, lines []string) ([]uint64, error) {
 	if len(lines) > 1 {
 		return nil, errors.New("refused")
 	}
@@ -141,6 +141,18 @@ func TestObjdumpWords(t *testing.T) {
 	if _, err := objdumpWords("  k.s:3 0x0 xyz RET\n"); err == nil {
 		t.Error("a malformed word was accepted")
 	}
+	// s390x: what go tool objdump printed for WORD $0xe7312000; BYTE $0x20;
+	// BYTE $0xe3 followed by RET (Go 1.27.1).
+	out = "TEXT wb.k(SB) k_s390x.s\n  k_s390x.s:3\t\t0x3d1\t\t\te731200020e3\t\tVFA V3, V1, V2, $2, $0\t\n  k_s390x.s:4\t\t0x3d7\t\t\t07fe\t\t\tRET\t\t\t\n  k_s390x.s:4\t\t0x3d9\t\t\t0000\t\t\t?\t\t\t\n"
+	w, err = objdumpWords(out)
+	if err != nil || len(w) != 3 || w[0] != 0xe731200020e3 || w[1] != 0x07fe {
+		t.Errorf("s390x: %#x, %v", w, err)
+	}
+	for _, bad := range []string{"e731200", "e731200020e3e7", "07f"} {
+		if _, err := objdumpWords("  k.s:3 0x0 " + bad + " X\n"); err == nil {
+			t.Errorf("%q was accepted as an instruction", bad)
+		}
+	}
 }
 
 func TestTestdataLayout(t *testing.T) {
@@ -153,6 +165,34 @@ func TestTestdataLayout(t *testing.T) {
 	testdata(&b, gap.ArchOf("loong64"))
 	if !strings.Contains(b.String(), "\tVFMADDD\t\tV4, V1, V2, V3\t// 43042209\n") {
 		t.Errorf("loong64 layout:\n%.300s", b.String())
+	}
+	b.Reset()
+	testdata(&b, gap.ArchOf("s390x"))
+	if !strings.Contains(b.String(), "\tVFASB\tV1, V2, V3              // e731200020e3\n") {
+		t.Errorf("s390x layout:\n%.300s", b.String())
+	}
+}
+
+// s390x.s mixes 4- and 6-byte instructions; scan reads the 6-byte ones and
+// skips the others rather than failing on them.
+func TestScanSixByte(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "src", "cmd", "asm", "internal", "asm", "testdata")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lines := "\tVFA\tV1, V2, $2, $0, V3      // e731200020e3\n\tMOVD\tR1, R2                  // b9040021\n\tVFADB\tV1, V2, V3              // e731200030e3\n"
+	os.WriteFile(filepath.Join(dir, "s390x.s"), []byte(lines), 0o644)
+	var b bytes.Buffer
+	if err := scan(&b, root, []*gap.Arch{gap.ArchOf("s390x")}); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	if !strings.Contains(out, "vfasb       Go spells it:\n\tVFA V1, V2, $2, $0, V3") || !strings.Contains(out, "wfasb       not in Go's test data") {
+		t.Errorf("scan:\n%s", out)
+	}
+	if strings.Contains(out, "VFADB") {
+		t.Errorf("the float64 add was taken for a float32 one:\n%s", out)
 	}
 }
 
@@ -254,7 +294,7 @@ func TestVerifyWithTheRealToolchain(t *testing.T) {
 // a verdict from the cases.
 type onlySingles struct{ fake }
 
-func (o onlySingles) assemble(goarch string, lines []string) ([]uint32, error) {
+func (o onlySingles) assemble(goarch string, lines []string) ([]uint64, error) {
 	if len(lines) > 1 {
 		return nil, errors.New("refused")
 	}

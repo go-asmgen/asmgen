@@ -73,7 +73,7 @@ func TestTestdataLine(t *testing.T) {
 }
 
 func TestArches(t *testing.T) {
-	if len(Arches()) != 2 || ArchOf("ppc64") == nil || ArchOf("loong64") == nil || ArchOf("mips") != nil {
+	if len(Arches()) != 3 || ArchOf("ppc64") == nil || ArchOf("loong64") == nil || ArchOf("s390x") == nil || ArchOf("mips") != nil {
 		t.Fatalf("Arches = %v", Arches())
 	}
 	for _, a := range Arches() {
@@ -90,10 +90,66 @@ func TestArches(t *testing.T) {
 		if err != nil || w != 0x12345678 {
 			t.Errorf("%s ParseHex(Hex) = %#x, %v", a.Name, w, err)
 		}
-		for _, bad := range []string{"1234567", "123456789", "zz345678"} {
+		for _, bad := range []string{"1234567", "123456789", "zz345678", "12345678901", "1234567890123", "zz3456789012"} {
 			if _, err := a.ParseHex(bad); err == nil {
 				t.Errorf("%s ParseHex(%q) accepted", a.Name, bad)
 			}
+		}
+	}
+}
+
+// s390x instructions are 6 bytes: the encoding is 48 bits, written as twelve
+// hex digits in memory order, and emitted as a WORD and two BYTEs.
+func TestSixByteInstructions(t *testing.T) {
+	a := ArchOf("s390x")
+	if got := a.Hex(0xe731200020e3); got != "e731200020e3" {
+		t.Errorf("Hex = %q", got)
+	}
+	if got := a.Hex(0x20e3); got != "0000000020e3" {
+		t.Errorf("Hex keeps leading zero bytes: %q", got)
+	}
+	if w, err := a.ParseHex("e7412200308f"); err != nil || w != 0xe7412200308f {
+		t.Errorf("ParseHex = %#x, %v", w, err)
+	}
+	if _, err := a.ParseHex("f0620b40"); err == nil {
+		t.Error("a 4-byte encoding was read as a 6-byte one")
+	}
+	if got := Lookup("s390x", "vfasb").Word(3, 1, 2); got != "WORD $0xe7312000; BYTE $0x20; BYTE $0xe3 // VFASB V1, V2, V3" {
+		t.Errorf("Word = %q", got)
+	}
+	if got := Lookup("s390x", "wfmssb").Word(31, 15, 16, 15); got != "WORD $0xe7ff0208; BYTE $0xfa; BYTE $0x8e // WFMSSB V15, V16, V15, V31" {
+		t.Errorf("Word = %q", got)
+	}
+}
+
+// The lines go.dev/cl/846286 adds to cmd/asm's s390x.s, verbatim: the
+// registry must reproduce each one, spelling, operand order, layout and
+// encoding, from the ISA operands.
+func TestS390xTestdataMatchesTheCL(t *testing.T) {
+	a := ArchOf("s390x")
+	for _, tc := range []struct {
+		isa  string
+		ops  []int
+		line string
+	}{
+		{"vfasb", []int{3, 1, 2}, "\tVFASB\tV1, V2, V3              // e731200020e3"},
+		{"wfasb", []int{6, 4, 5}, "\tWFASB\tV4, V5, V6              // e764500820e3"},
+		{"vfssb", []int{9, 8, 7}, "\tVFSSB\tV7, V8, V9              // e798700020e2"},
+		{"wfssb", []int{12, 11, 10}, "\tWFSSB\tV10, V11, V12           // e7cba00820e2"},
+		{"vfmsb", []int{15, 13, 14}, "\tVFMSB\tV13, V14, V15           // e7fde00020e7"},
+		{"wfmsb", []int{3, 1, 2}, "\tWFMSB\tV1, V2, V3              // e731200820e7"},
+		{"vfdsb", []int{6, 5, 4}, "\tVFDSB\tV4, V5, V6              // e765400020e5"},
+		{"wfdsb", []int{9, 8, 7}, "\tWFDSB\tV7, V8, V9              // e798700820e5"},
+		{"vfsqsb", []int{2, 1}, "\tVFSQSB\tV1, V2                  // e721000020ce"},
+		{"wfsqsb", []int{4, 3}, "\tWFSQSB\tV3, V4                  // e743000820ce"},
+		{"vfmasb", []int{4, 1, 2, 3}, "\tVFMASB\tV1, V2, V3, V4          // e7412200308f"},
+		{"wfmasb", []int{8, 5, 6, 7}, "\tWFMASB\tV5, V6, V7, V8          // e7856208708f"},
+		{"vfmssb", []int{12, 9, 10, 11}, "\tVFMSSB\tV9, V10, V11, V12       // e7c9a200b08e"},
+		{"wfmssb", []int{0, 13, 14, 15}, "\tWFMSSB\tV13, V14, V15, V0       // e70de208f08e"},
+	} {
+		in := Lookup("s390x", tc.isa)
+		if got := a.TestdataLine(in, Case{tc.ops, in.Encode(tc.ops...)}); got != tc.line {
+			t.Errorf("%s:\n got %q\nwant %q", tc.isa, got, tc.line)
 		}
 	}
 }
@@ -108,6 +164,10 @@ func TestRefusals(t *testing.T) {
 		"offset not ×8": func() { Lookup("loong64", "xvldrepl.d").Encode(0, 4, 4) },
 		"offset 2048":   func() { Lookup("loong64", "xvldrepl.d").Encode(0, 4, 2048) },
 		"offset -2056":  func() { Lookup("loong64", "vldrepl.d").Encode(0, 4, -2056) },
+		"V32 target":    func() { Lookup("s390x", "vfasb").Encode(32, 0, 0) },
+		"V32 source":    func() { Lookup("s390x", "vfssb").Encode(0, 0, 32) },
+		"V-1 fma":       func() { Lookup("s390x", "vfmasb").Encode(0, 0, 0, -1) },
+		"V32 sqrt":      func() { Lookup("s390x", "wfsqsb").Encode(0, 32) },
 	} {
 		func() {
 			defer func() {
