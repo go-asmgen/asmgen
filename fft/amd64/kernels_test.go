@@ -68,7 +68,8 @@ func TestGolden(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v (run go test -update to write it)", name, err)
 		}
-		if got != string(want) {
+		// A checkout may have turned the line ends into CRLF (Windows).
+		if got != strings.ReplaceAll(string(want), "\r\n", "\n") {
 			t.Errorf("%s: the builder's text differs from %s", name, path)
 		}
 	}
@@ -100,7 +101,7 @@ func TestGoFFTDigests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b.String() != string(want) {
+	if b.String() != strings.ReplaceAll(string(want), "\r\n", "\n") {
 		t.Errorf("go-fft's kernels changed:\ngot\n%swant\n%s", b.String(), want)
 	}
 }
