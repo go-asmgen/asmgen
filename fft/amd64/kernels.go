@@ -96,6 +96,14 @@ type Kernels struct {
 	// SSE2 builders do not read it. The kernels it builds use FMA3 and must
 	// be gated on it (asm.FeatureProbe with asm.FMA).
 	FMA bool
+	// Dup builds Pass's interleaved AVX2 kernels of radix 2, 3, 4, 5, 8, 9,
+	// 10, 12, 15 and 20 for twiddle tables stored pre-duplicated, (wr, wr)
+	// then (wi, wi) per group, as radix 16's always are (go-fft's
+	// radix16Twiddles): each product then takes its twiddle halves as
+	// memory operands, and swapping y is its only shuffle. The products are
+	// the same operations on the same values, so a Dup kernel is
+	// bit-identical to its twin. Only Pass reads it.
+	Dup bool
 }
 
 // check panics unless r is one of the radices a builder supports.

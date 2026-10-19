@@ -450,10 +450,10 @@ func (c *Kernels) pass(f *emit.File, name string, r int) {
 	b := asm.NewFunc(name, sig, 0)
 	// A four-point twiddle group is walked as two pairs (q0, q1); then come a
 	// two-point group (p) and a one-point group (x) for ido mod 4.
-	q0 := skEmit{c: c, b: b, w: "Y", g: 4}
-	q1 := skEmit{c: c, b: b, w: "Y", g: 4, half: 1}
-	p := skEmit{c: c, b: b, w: "Y", g: 2}
-	x := skEmit{c: c, b: b, w: "X", g: 1}
+	q0 := skEmit{c: c, b: b, w: "Y", g: 4, dup: c.Dup}
+	q1 := skEmit{c: c, b: b, w: "Y", g: 4, half: 1, dup: c.Dup}
+	p := skEmit{c: c, b: b, w: "Y", g: 2, dup: c.Dup}
+	x := skEmit{c: c, b: b, w: "X", g: 1, dup: c.Dup}
 	b.LoadArg("cc", "AX").LoadArg("ch", "BX").LoadArg("tw", "R15").LoadArg("k", "R14").
 		LoadArg("ido", "CX").LoadArg("l1", "R8")
 	b.Raw("MOVQ CX, DX").

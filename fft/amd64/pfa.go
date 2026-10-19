@@ -182,10 +182,10 @@ func (c *Kernels) passPFA(f *emit.File, name string, q int) {
 		[]asm.Type{asm.Ptr, asm.Ptr, asm.Ptr, asm.Ptr, asm.Int64, asm.Int64}, nil, nil,
 	)
 	b := asm.NewFunc(name, sig, spill+16)
-	q0 := skEmit{c: c, b: b, w: "Y", g: 4, addr: comp2Addr}
-	q1 := skEmit{c: c, b: b, w: "Y", g: 4, half: 1, addr: comp2Addr}
-	p := skEmit{c: c, b: b, w: "Y", g: 2, addr: comp2Addr}
-	x := skEmit{c: c, b: b, w: "X", g: 1, addr: comp2Addr}
+	q0 := skEmit{c: c, b: b, w: "Y", g: 4, addr: comp2Addr, dup: c.Dup}
+	q1 := skEmit{c: c, b: b, w: "Y", g: 4, half: 1, addr: comp2Addr, dup: c.Dup}
+	p := skEmit{c: c, b: b, w: "Y", g: 2, addr: comp2Addr, dup: c.Dup}
+	x := skEmit{c: c, b: b, w: "X", g: 1, addr: comp2Addr, dup: c.Dup}
 	b.LoadArg("cc", "AX").LoadArg("ch", "BX").LoadArg("k", "R14").
 		LoadArg("ido", "CX").LoadArg("l1", "R8")
 	b.Raw("MOVQ CX, DX").
