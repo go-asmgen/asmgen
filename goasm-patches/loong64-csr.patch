@@ -1,4 +1,4 @@
-From 4d87e8902e70a99809c2101b44d312c280469286 Mon Sep 17 00:00:00 2001
+From 5d25a52a4195059d0930d7d9bda5ac3e98dfd764 Mon Sep 17 00:00:00 2001
 From: tannevaled <google@nextonline.org>
 Date: Sun, 25 Oct 2026 18:16:38 +0100
 Subject: [PATCH] cmd/internal/obj/loong64: add CSRRD, CSRWR and CSRXCHG
@@ -40,16 +40,19 @@ index 1eee427982..cb78ce0834 100644
  	MOVV	FCSR3, R4		// 64c81401
  	MOVV	F4, FCC0		// 80d01401
 diff --git a/src/cmd/asm/internal/asm/testdata/loong64error.s b/src/cmd/asm/internal/asm/testdata/loong64error.s
-index 25ef3a85a4..86574c17be 100644
+index 25ef3a85a4..5b40f59441 100644
 --- a/src/cmd/asm/internal/asm/testdata/loong64error.s
 +++ b/src/cmd/asm/internal/asm/testdata/loong64error.s
-@@ -13,3 +13,6 @@ TEXT errors(SB),$0
- 	LL		1(R5), R4	// ERROR "offset must be a multiple of 4."
- 	LLW		1(R5), R4	// ERROR "offset must be a multiple of 4."
- 	LLV		1(R5), R4	// ERROR "offset must be a multiple of 4."
+@@ -8,6 +8,9 @@ TEXT errors(SB),$0
+ 	ADDV16		$1, R4, R5	// ERROR "the constant must be a multiple of 65536."
+ 	ADDV16		$65535, R4, R5	// ERROR "the constant must be a multiple of 65536."
+ 	SC		R4, 1(R5)	// ERROR "offset must be a multiple of 4."
 +	CSRRD		$16384, R4	// ERROR "operand out of range 0 to 16383"
 +	CSRXCHG		$1, R0, R4	// ERROR "mask register must not be R0 or R1"
 +	CSRXCHG		$1, R1, R4	// ERROR "mask register must not be R0 or R1"
+ 	SCW		R4, 1(R5)	// ERROR "offset must be a multiple of 4."
+ 	SCV		R4, 1(R5)	// ERROR "offset must be a multiple of 4."
+ 	LL		1(R5), R4	// ERROR "offset must be a multiple of 4."
 diff --git a/src/cmd/internal/obj/loong64/anames.go b/src/cmd/internal/obj/loong64/anames.go
 index 1380852a68..224be833ed 100644
 --- a/src/cmd/internal/obj/loong64/anames.go
