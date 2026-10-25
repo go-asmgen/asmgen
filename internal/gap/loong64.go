@@ -85,7 +85,78 @@ func init() {
 			{[]int{31, 31, 2040}, 0x3213ffff}, // xvldrepl.d $xr31,$r31,2040
 		},
 	})
+	a.insns = append(a.insns, csrInsns()...)
 	arches = append(arches, a)
+}
+
+// loong64: the privileged CSR access instructions (LoongArch Reference
+// Manual, Volume 1, §4.2.1 "CSR Access Instructions"). cmd/asm has none of
+// them (Go master, 2026-10-25), so tamago's loong64 bare-metal port writes
+// csrwr as a WORD. The spelling reverses the ISA operands as cmd/asm does,
+// destination last and the CSR number as a constant: csrxchg rd, rj, csr is
+// CSRXCHG $csr, Rj, Rd.
+//
+// The three share one major opcode: rj = 0 is csrrd, rj = 1 csrwr, any other
+// rj csrxchg, which is why csrxchg needs NotMask and refuses rj 0 and 1.
+
+const csrSource = "GNU as 2.44 (Debian trixie binutils-loongarch64-linux-gnu), read back with objdump; llvm-mc 23.1.2 agrees on every case"
+
+func csrInsns() []*Insn {
+	return []*Insn{{
+		Arch: "loong64", ISA: "csrrd", Plan9: "CSRRD ${1}, R{0}",
+		Mask: 0xff0003e0, Bits: 0x04000000,
+		Encode: func(ops ...int) uint64 { return csr(0x04000000, ops[0], 0, ops[1]) },
+		Source: csrSource,
+		Golden: []Case{
+			{[]int{0, 0}, 0x04000000},       // csrrd $zero, 0x0
+			{[]int{4, 1}, 0x04000404},       // csrrd $a0, 0x1
+			{[]int{31, 0}, 0x0400001f},      // csrrd $s8, 0x0
+			{[]int{0, 0x3fff}, 0x04fffc00},  // csrrd $zero, 0x3fff
+			{[]int{12, 0x180}, 0x0406000c},  // csrrd $t0, 0x180
+			{[]int{31, 0x3fff}, 0x04fffc1f}, // csrrd $s8, 0x3fff
+		},
+	}, {
+		Arch: "loong64", ISA: "csrwr", Plan9: "CSRWR ${1}, R{0}",
+		Mask: 0xff0003e0, Bits: 0x04000020,
+		Encode: func(ops ...int) uint64 { return csr(0x04000020, ops[0], 0, ops[1]) },
+		Source: csrSource,
+		Golden: []Case{
+			{[]int{0, 0}, 0x04000020},       // csrwr $zero, 0x0
+			{[]int{19, 2}, 0x04000833},      // csrwr $t7, 0x2 (tamago-uefi's EUEN write)
+			{[]int{31, 0}, 0x0400003f},      // csrwr $s8, 0x0
+			{[]int{0, 0x3fff}, 0x04fffc20},  // csrwr $zero, 0x3fff
+			{[]int{12, 0xc}, 0x0400302c},    // csrwr $t0, 0xc
+			{[]int{31, 0x3fff}, 0x04fffc3f}, // csrwr $s8, 0x3fff
+		},
+	}, {
+		Arch: "loong64", ISA: "csrxchg", Plan9: "CSRXCHG ${2}, R{1}, R{0}",
+		Mask: 0xff000000, Bits: 0x04000000,
+		NotMask: 0xff0003c0, NotBits: 0x04000000,
+		Encode: func(ops ...int) uint64 {
+			if ops[1] < 2 {
+				panic(fmt.Sprintf("loong64: csrxchg mask register R%d would encode csrrd or csrwr", ops[1]))
+			}
+			return csr(0x04000000, ops[0], ops[1], ops[2])
+		},
+		Source: csrSource,
+		Golden: []Case{
+			{[]int{0, 2, 0}, 0x04000040},        // csrxchg $zero, $tp, 0x0
+			{[]int{12, 13, 1}, 0x040005ac},      // csrxchg $t0, $t1, 0x1
+			{[]int{31, 2, 0}, 0x0400005f},       // csrxchg $s8, $tp, 0x0
+			{[]int{0, 31, 0}, 0x040003e0},       // csrxchg $zero, $s8, 0x0
+			{[]int{0, 2, 0x3fff}, 0x04fffc40},   // csrxchg $zero, $tp, 0x3fff
+			{[]int{4, 5, 2}, 0x040008a4},        // csrxchg $a0, $a1, 0x2
+			{[]int{31, 31, 0x3fff}, 0x04ffffff}, // csrxchg $s8, $s8, 0x3fff
+		},
+	}}
+}
+
+// csr encodes a CSR access: the 14-bit CSR number, rj and rd.
+func csr(base uint64, rd, rj, num int) uint64 {
+	if num < 0 || num > 0x3fff {
+		panic(fmt.Sprintf("loong64: CSR number %#x is not in [0, 0x3fff]", num))
+	}
+	return base | uint64(num)<<10 | reg("loong64", "general", rj, 31)<<5 | reg("loong64", "general", rd, 31)
 }
 
 // r4 encodes the four-register form: d, j, k, a from bit 0 up, five bits each.

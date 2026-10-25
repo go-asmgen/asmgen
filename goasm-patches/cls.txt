@@ -6,3 +6,4 @@
 845166 loong64-vstelm-range.patch
 846285 -
 846286 -
+853786 loong64-csr.patch

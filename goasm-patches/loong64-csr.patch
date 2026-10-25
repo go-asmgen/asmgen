@@ -1,0 +1,146 @@
+From 4d87e8902e70a99809c2101b44d312c280469286 Mon Sep 17 00:00:00 2001
+From: tannevaled <google@nextonline.org>
+Date: Sun, 25 Oct 2026 18:16:38 +0100
+Subject: [PATCH] cmd/internal/obj/loong64: add CSRRD, CSRWR and CSRXCHG
+ instructions
+
+Add the privileged CSR access instructions, written CSRRD $csr, Rd,
+CSRWR $csr, Rd and CSRXCHG $csr, Rj, Rd. A CSR number above 16383 and
+a CSRXCHG mask register of R0 or R1, which would encode CSRRD or CSRWR,
+are rejected.
+
+Change-Id: I37f89ef8a0946152d38e8a97bc2aa316079396e0
+---
+ src/cmd/asm/internal/asm/testdata/loong64enc1.s  |  9 +++++++++
+ src/cmd/asm/internal/asm/testdata/loong64error.s |  3 +++
+ src/cmd/internal/obj/loong64/anames.go           |  3 +++
+ src/cmd/internal/obj/loong64/asm.go              | 15 +++++++++++++++
+ src/cmd/internal/obj/loong64/inst.go             |  5 +++++
+ src/cmd/internal/obj/loong64/instOp.go           |  3 +++
+ 6 files changed, 38 insertions(+)
+
+diff --git a/src/cmd/asm/internal/asm/testdata/loong64enc1.s b/src/cmd/asm/internal/asm/testdata/loong64enc1.s
+index 1eee427982..cb78ce0834 100644
+--- a/src/cmd/asm/internal/asm/testdata/loong64enc1.s
++++ b/src/cmd/asm/internal/asm/testdata/loong64enc1.s
+@@ -274,6 +274,15 @@ lable2:
+ 	RDTIMEHW R4, R0			// 80640000
+ 	RDTIMED  R4, R5			// 85680000
+ 
++	CSRRD	$1, R4			// 04040004
++	CSRRD	$16383, R31		// 1ffcff04
++
++	CSRWR	$2, R19			// 33080004
++	CSRWR	$16383, R0		// 20fcff04
++
++	CSRXCHG	$1, R13, R12		// ac050004
++	CSRXCHG	$16383, R31, R31	// ffffff04
++
+ 	MOVV	R4, FCSR3		// 83c01401
+ 	MOVV	FCSR3, R4		// 64c81401
+ 	MOVV	F4, FCC0		// 80d01401
+diff --git a/src/cmd/asm/internal/asm/testdata/loong64error.s b/src/cmd/asm/internal/asm/testdata/loong64error.s
+index 25ef3a85a4..86574c17be 100644
+--- a/src/cmd/asm/internal/asm/testdata/loong64error.s
++++ b/src/cmd/asm/internal/asm/testdata/loong64error.s
+@@ -13,3 +13,6 @@ TEXT errors(SB),$0
+ 	LL		1(R5), R4	// ERROR "offset must be a multiple of 4."
+ 	LLW		1(R5), R4	// ERROR "offset must be a multiple of 4."
+ 	LLV		1(R5), R4	// ERROR "offset must be a multiple of 4."
++	CSRRD		$16384, R4	// ERROR "operand out of range 0 to 16383"
++	CSRXCHG		$1, R0, R4	// ERROR "mask register must not be R0 or R1"
++	CSRXCHG		$1, R1, R4	// ERROR "mask register must not be R0 or R1"
+diff --git a/src/cmd/internal/obj/loong64/anames.go b/src/cmd/internal/obj/loong64/anames.go
+index 1380852a68..224be833ed 100644
+--- a/src/cmd/internal/obj/loong64/anames.go
++++ b/src/cmd/internal/obj/loong64/anames.go
+@@ -229,6 +229,9 @@ var Anames = []string{
+ 	"RDTIMEHW",
+ 	"RDTIMED",
+ 	"CPUCFG",
++	"CSRRD",
++	"CSRWR",
++	"CSRXCHG",
+ 	"FMADDF",
+ 	"FMADDD",
+ 	"FMSUBF",
+diff --git a/src/cmd/internal/obj/loong64/asm.go b/src/cmd/internal/obj/loong64/asm.go
+index 11e3070bb4..955e56c917 100644
+--- a/src/cmd/internal/obj/loong64/asm.go
++++ b/src/cmd/internal/obj/loong64/asm.go
+@@ -316,6 +316,9 @@ var optab = []Optab{
+ 	{ASYSCALL, C_NONE, C_NONE, C_NONE, C_NONE, C_NONE, 5, 4, 0, 0},
+ 	{ASYSCALL, C_U15CON, C_NONE, C_NONE, C_NONE, C_NONE, 5, 4, 0, 0},
+ 
++	{ACSRRD, C_U15CON, C_NONE, C_NONE, C_REG, C_NONE, 75, 4, 0, 0},
++	{ACSRXCHG, C_U15CON, C_REG, C_NONE, C_REG, C_NONE, 75, 4, 0, 0},
++
+ 	{AFMADDF, C_FREG, C_FREG, C_NONE, C_FREG, C_NONE, 37, 4, 0, 0},
+ 	{AFMADDF, C_FREG, C_FREG, C_FREG, C_FREG, C_NONE, 37, 4, 0, 0},
+ 
+@@ -1540,6 +1543,7 @@ func buildop(ctxt *obj.Link) {
+ 			AFSEL,
+ 			AADDV16,
+ 			ASCQ,
++			ACSRXCHG,
+ 			obj.ANOP,
+ 			obj.ATEXT,
+ 			obj.AFUNCDATA,
+@@ -1551,6 +1555,9 @@ func buildop(ctxt *obj.Link) {
+ 			opset(ARDTIMEHW, r0)
+ 			opset(ARDTIMED, r0)
+ 
++		case ACSRRD:
++			opset(ACSRWR, r0)
++
+ 		case ACLOW:
+ 			opset(ACLZW, r0)
+ 			opset(ACTOW, r0)
+@@ -3258,6 +3265,14 @@ func (c *ctxt0) asmout(p *obj.Prog, o *Optab, out []uint32) {
+ 			o4 = OP_RRR(c.oprrr(add), uint32(r), uint32(REGTMP), uint32(REGTMP))
+ 			o5 = OP_14IRR(c.opirr(p.As), uint32(v>>2), uint32(REGTMP), uint32(p.To.Reg))
+ 		}
++
++	case 75: // csrrd/csrwr/csrxchg $csr, [rj], rd
++		v := c.regoff(&p.From)
++		c.checkoperand(p, uint32(v), 0x3fff)
++		if p.As == ACSRXCHG && (p.Reg == REG_R0 || p.Reg == REG_R1) {
++			c.ctxt.Diag("CSRXCHG mask register must not be R0 or R1: %v", p)
++		}
++		o1 = OP_14IRR(c.opirr(p.As), uint32(v), uint32(p.Reg), uint32(p.To.Reg))
+ 	}
+ 
+ 	out[0] = o1
+diff --git a/src/cmd/internal/obj/loong64/inst.go b/src/cmd/internal/obj/loong64/inst.go
+index be5c7fe2f0..9bd60d9f1a 100644
+--- a/src/cmd/internal/obj/loong64/inst.go
++++ b/src/cmd/internal/obj/loong64/inst.go
+@@ -299,6 +299,11 @@ const (
+ 	ARDTIMED
+ 	ACPUCFG
+ 
++	// 4.2.1. CSR Access Instructions
++	ACSRRD
++	ACSRWR
++	ACSRXCHG
++
+ 	// 3.2.1.2
+ 	AFMADDF
+ 	AFMADDD
+diff --git a/src/cmd/internal/obj/loong64/instOp.go b/src/cmd/internal/obj/loong64/instOp.go
+index be15b6e72d..651aef8842 100644
+--- a/src/cmd/internal/obj/loong64/instOp.go
++++ b/src/cmd/internal/obj/loong64/instOp.go
+@@ -749,6 +749,9 @@ var opirr = map[obj.As]uint32{
+ 	ABFPT:       0x12<<26 | 0x1<<8,    // bcnez
+ 	ABFPF:       0x12<<26 | 0x0<<8,    // bceqz
+ 	APRELDX:     0x07058 << 15,        // preldx
++	ACSRRD:      0x4<<24 | 0x0<<5,     // csrrd
++	ACSRWR:      0x4<<24 | 0x1<<5,     // csrwr
++	ACSRXCHG:    0x4 << 24,            // csrxchg
+ 	-AMOVB:      0x0a0 << 22,          // ld.b
+ 	-AMOVH:      0x0a1 << 22,          // ld.h
+ 	-AMOVW:      0x0a2 << 22,          // ld.w
+-- 
+2.54.0 (Apple Git-157)
+

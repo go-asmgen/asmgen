@@ -173,7 +173,7 @@ func scanFile(path string, a *gap.Arch, hits map[*gap.Insn][]string) error {
 			continue // another length: s390x.s also holds 4-byte instructions
 		}
 		for _, in := range a.Insns() {
-			if word&in.Mask == in.Bits {
+			if in.Matches(word) {
 				insn := strings.Join(strings.Fields(line[:strings.Index(line, "//")]), " ")
 				hits[in] = append(hits[in], fmt.Sprintf("%-32s %s:%d", insn, filepath.Base(path), n))
 			}

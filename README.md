@@ -169,6 +169,14 @@ works from that registry:
 - it writes the `cmd/asm` test lines for an upstream patch;
 - it holds a toolchain to every reference case.
 
+The registry also holds instructions that hand-written Go assembly needs and
+no `Builder` method emits. The loong64 CSR access instructions `csrrd`,
+`csrwr` and `csrxchg` are an example: tamago's bare-metal loong64 port
+writes them as `WORD`s. Their 19 reference encodings come from GNU as 2.44,
+and `llvm-mc` 23 agrees on every case. They are proposed for `cmd/asm` as
+`CSRRD $csr, Rd`, `CSRWR $csr, Rd` and `CSRXCHG $csr, Rj, Rd` in
+[CL 853786](https://go.dev/cl/853786).
+
 The patches live in [`goasm-patches/`](goasm-patches/). A weekly workflow
 opens an issue when a Go release or master gains one of these instructions,
 and checks that the patches still apply to master and still encode correctly.
