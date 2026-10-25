@@ -24,19 +24,44 @@ func TestEveryEncodingMatchesItsReference(t *testing.T) {
 // name, so it must accept every reference word and fix only opcode bits.
 func TestOpcodeMaskRecognisesEveryReference(t *testing.T) {
 	for _, in := range All() {
-		if in.Bits&^in.Mask != 0 {
+		if in.Bits&^in.Mask != 0 || in.NotBits&^in.NotMask != 0 {
 			t.Errorf("%s: Bits %#08x has bits outside Mask %#08x", in.ISA, in.Bits, in.Mask)
 		}
 		for _, c := range in.Golden {
-			if c.Want&in.Mask != in.Bits {
+			if !in.Matches(c.Want) {
 				t.Errorf("%s %v: %#08x not recognised by its mask", in.ISA, c.Ops, c.Want)
 			}
 		}
 		for _, other := range All() {
-			if other != in && other.Arch == in.Arch && other.Golden[0].Want&in.Mask == in.Bits {
-				t.Errorf("%s's mask also matches %s", in.ISA, other.ISA)
+			if other == in || other.Arch != in.Arch {
+				continue
+			}
+			for _, c := range other.Golden {
+				if in.Matches(c.Want) {
+					t.Errorf("%s's mask also matches %s %v", in.ISA, other.ISA, c.Ops)
+				}
 			}
 		}
+	}
+}
+
+// csrrd, csrwr and csrxchg share an opcode; rj tells them apart, and
+// without its exception csrxchg's mask would claim the other two.
+func TestCSRExchangeExcludesReadAndWrite(t *testing.T) {
+	xchg := Lookup("loong64", "csrxchg")
+	for _, w := range []uint64{0x04000000, 0x04000020, 0x04fffc3f} {
+		if w&xchg.Mask != xchg.Bits || xchg.Matches(w) {
+			t.Errorf("%#08x: the exception does not remove it", w)
+		}
+	}
+	if !xchg.Matches(0x04000040) || !xchg.Matches(0x040003e0) {
+		t.Error("csrxchg with rj 2 or 31 is not recognised")
+	}
+	if got := xchg.Syntax(12, 13, 1); got != "CSRXCHG $1, R13, R12" {
+		t.Errorf("Syntax = %q", got)
+	}
+	if got := Lookup("loong64", "csrwr").Word(19, 2); got != "WORD $0x04000833 // CSRWR $2, R19" {
+		t.Errorf("Word = %q", got)
 	}
 }
 
@@ -164,6 +189,12 @@ func TestRefusals(t *testing.T) {
 		"offset not ×8": func() { Lookup("loong64", "xvldrepl.d").Encode(0, 4, 4) },
 		"offset 2048":   func() { Lookup("loong64", "xvldrepl.d").Encode(0, 4, 2048) },
 		"offset -2056":  func() { Lookup("loong64", "vldrepl.d").Encode(0, 4, -2056) },
+		"CSR 0x4000":    func() { Lookup("loong64", "csrrd").Encode(4, 0x4000) },
+		"CSR -1":        func() { Lookup("loong64", "csrwr").Encode(4, -1) },
+		"csr rd 32":     func() { Lookup("loong64", "csrrd").Encode(32, 0) },
+		"xchg rj R0":    func() { Lookup("loong64", "csrxchg").Encode(4, 0, 1) },
+		"xchg rj R1":    func() { Lookup("loong64", "csrxchg").Encode(4, 1, 1) },
+		"xchg rj 32":    func() { Lookup("loong64", "csrxchg").Encode(4, 32, 1) },
 		"V32 target":    func() { Lookup("s390x", "vfasb").Encode(32, 0, 0) },
 		"V32 source":    func() { Lookup("s390x", "vfssb").Encode(0, 0, 32) },
 		"V-1 fma":       func() { Lookup("s390x", "vfmasb").Encode(0, 0, 0, -1) },

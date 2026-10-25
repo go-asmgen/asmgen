@@ -37,6 +37,11 @@ type Insn struct {
 	// Arch.Size bytes long: the 32-bit word on ppc64 and loong64, the 48 bits
 	// of a 6-byte s390x vector instruction.
 	Mask, Bits uint64
+	// NotMask and NotBits, when NotMask is not zero, carve an exception out
+	// of Mask/Bits: w is not this instruction if w&NotMask == NotBits. It is
+	// for an operand field whose values select other instructions: loong64
+	// csrxchg with rj 0 or 1 is csrrd or csrwr.
+	NotMask, NotBits uint64
 	// Encode returns the encoding for operands in ISA order. It panics on an
 	// operand the instruction cannot encode.
 	Encode func(ops ...int) uint64
@@ -53,6 +58,12 @@ type Insn struct {
 type Case struct {
 	Ops  []int
 	Want uint64
+}
+
+// Matches says whether the encoding w is this instruction, whatever its
+// operands.
+func (in *Insn) Matches(w uint64) bool {
+	return w&in.Mask == in.Bits && (in.NotMask == 0 || w&in.NotMask != in.NotBits)
 }
 
 // Syntax renders the proposed Plan 9 form for the operands.
