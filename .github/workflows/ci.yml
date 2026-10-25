@@ -184,8 +184,38 @@ jobs:
         with:
           go-version: '1.27.2'
 
-      - name: Install qemu-user-static
-        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+      # ⛔ `qemu-user-static` is a VIRTUAL package on Ubuntu 26.04, which
+      # `ubuntu-latest` became on 2026-10-19, and apt refuses to choose between
+      # its two providers:
+      #
+      #   E: Package 'qemu-user-static' has no installation candidate
+      #
+      # ⚠ Installing a provider is NOT the fix: `qemu-user-binfmt` registers
+      # binfmt handlers, it does not ship the `qemu-<arch>-static` binaries this
+      # lane invokes. `qemu-user` ships the dynamic `qemu-<arch>`, which is all
+      # `go test -exec` needs, so both are installed and BOTH NAMES are accepted
+      # here. go-tex/engine#645 has the full account.
+      #
+      # This job tests ONE architecture, so the emulator is resolved once and
+      # carried to the test steps in $GITHUB_ENV: two resolvers in two steps are
+      # two chances to disagree.
+      - name: install qemu user-mode emulators
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update && sudo apt-get install -y qemu-user qemu-user-binfmt
+          q=""
+          for cand in qemu-riscv64-static qemu-riscv64; do
+            command -v "$cand" >/dev/null 2>&1 && q="$cand" && break
+          done
+          # ⛔ A missing emulator FAILS this job. A lane that reports success for
+          # an architecture it never ran is the one outcome these jobs exist to
+          # rule out -- and the runtime proof is the whole point here, since
+          # asmdecl and cmd/asm already validate statically.
+          if [ -z "$q" ]; then
+            echo "::error::no qemu user emulator for riscv64 (looked for qemu-riscv64-static and qemu-riscv64)" >&2
+            exit 1
+          fi
+          echo "QEMU_EXEC=$q" >> "$GITHUB_ENV"
 
       - name: Regenerate assembly and check it is committed
         run: |
@@ -200,12 +230,18 @@ jobs:
         run: GOOS=linux GOARCH=riscv64 go build ./examples/riscv64/... ./examples/simd/riscv64/... ./examples/loop/riscv64/... ./examples/fft/riscv64/...
 
       - name: Test scalar (runtime under qemu-riscv64)
-        run: GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/riscv64/...
+        # Printed on purpose: without it, "ran under emulation" and "skipped"
+        # are indistinguishable from a green tick.
+        run: |
+          echo "running riscv64 under $QEMU_EXEC"
+          GOARCH=riscv64 go test -exec "$QEMU_EXEC" ./examples/riscv64/...
 
       - name: Test RVV SIMD (runtime under qemu with vectors)
         env:
           QEMU_CPU: rv64,v=true,vlen=128
-        run: GOARCH=riscv64 go test -exec=qemu-riscv64-static ./examples/simd/riscv64/... ./examples/loop/riscv64/... ./examples/fft/riscv64/...
+        run: |
+          echo "running riscv64 under $QEMU_EXEC"
+          GOARCH=riscv64 go test -exec "$QEMU_EXEC" ./examples/simd/riscv64/... ./examples/loop/riscv64/... ./examples/fft/riscv64/...
 
   # loong64 (LoongArch 64-bit) follows the same recipe as riscv64.
   asm-loong64:
@@ -220,8 +256,23 @@ jobs:
         with:
           go-version: '1.27.2'
 
-      - name: Install qemu-user-static
-        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+      # ⛔ See asm-riscv64 above: `qemu-user-static` is a VIRTUAL package on
+      # Ubuntu 26.04 with no installation candidate, and a provider alone does
+      # not ship the emulator binaries. ⚠ loong64's GOARCH and its qemu binary
+      # name DIFFER -- the emulator is `qemu-loongarch64`, not `qemu-loong64`.
+      - name: install qemu user-mode emulators
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update && sudo apt-get install -y qemu-user qemu-user-binfmt
+          q=""
+          for cand in qemu-loongarch64-static qemu-loongarch64; do
+            command -v "$cand" >/dev/null 2>&1 && q="$cand" && break
+          done
+          if [ -z "$q" ]; then
+            echo "::error::no qemu user emulator for loong64 (looked for qemu-loongarch64-static and qemu-loongarch64)" >&2
+            exit 1
+          fi
+          echo "QEMU_EXEC=$q" >> "$GITHUB_ENV"
 
       - name: Regenerate assembly and check it is committed
         run: |
@@ -236,12 +287,16 @@ jobs:
         run: GOOS=linux GOARCH=loong64 go build ./examples/loong64/... ./examples/simd/loong64/... ./examples/loop/loong64/...
 
       - name: Test scalar (runtime under qemu-loongarch64)
-        run: GOARCH=loong64 go test -exec=qemu-loongarch64-static ./examples/loong64/...
+        run: |
+          echo "running loong64 under $QEMU_EXEC"
+          GOARCH=loong64 go test -exec "$QEMU_EXEC" ./examples/loong64/...
 
       - name: Test LSX SIMD (runtime under qemu with vectors)
         env:
           QEMU_CPU: la464
-        run: GOARCH=loong64 go test -exec=qemu-loongarch64-static ./examples/simd/loong64/... ./examples/loop/loong64/...
+        run: |
+          echo "running loong64 under $QEMU_EXEC"
+          GOARCH=loong64 go test -exec "$QEMU_EXEC" ./examples/simd/loong64/... ./examples/loop/loong64/...
 
   # ppc64le (POWER, VSX/AltiVec) — little-endian. VSX is baseline on POWER8+,
   # so the default qemu CPU suffices.
@@ -257,8 +312,22 @@ jobs:
         with:
           go-version: '1.27.2'
 
-      - name: Install qemu-user-static
-        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+      # ⛔ See asm-riscv64 above: `qemu-user-static` is a VIRTUAL package on
+      # Ubuntu 26.04 with no installation candidate, and a provider alone does
+      # not ship the emulator binaries.
+      - name: install qemu user-mode emulators
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update && sudo apt-get install -y qemu-user qemu-user-binfmt
+          q=""
+          for cand in qemu-ppc64le-static qemu-ppc64le; do
+            command -v "$cand" >/dev/null 2>&1 && q="$cand" && break
+          done
+          if [ -z "$q" ]; then
+            echo "::error::no qemu user emulator for ppc64le (looked for qemu-ppc64le-static and qemu-ppc64le)" >&2
+            exit 1
+          fi
+          echo "QEMU_EXEC=$q" >> "$GITHUB_ENV"
 
       - name: Regenerate assembly and check it is committed
         run: |
@@ -273,7 +342,9 @@ jobs:
         run: GOOS=linux GOARCH=ppc64le go build ./examples/simd/ppc64/...
 
       - name: Test VSX SIMD (runtime under qemu-ppc64le)
-        run: GOARCH=ppc64le go test -exec=qemu-ppc64le-static ./examples/simd/ppc64/...
+        run: |
+          echo "running ppc64le under $QEMU_EXEC"
+          GOARCH=ppc64le go test -exec "$QEMU_EXEC" ./examples/simd/ppc64/...
 
   # s390x (IBM Z, vector facility) — the only big-endian target. Same recipe;
   # QEMU_CPU=max enables the vector facility.
@@ -289,8 +360,22 @@ jobs:
         with:
           go-version: '1.27.2'
 
-      - name: Install qemu-user-static
-        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+      # ⛔ See asm-riscv64 above: `qemu-user-static` is a VIRTUAL package on
+      # Ubuntu 26.04 with no installation candidate, and a provider alone does
+      # not ship the emulator binaries.
+      - name: install qemu user-mode emulators
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update && sudo apt-get install -y qemu-user qemu-user-binfmt
+          q=""
+          for cand in qemu-s390x-static qemu-s390x; do
+            command -v "$cand" >/dev/null 2>&1 && q="$cand" && break
+          done
+          if [ -z "$q" ]; then
+            echo "::error::no qemu user emulator for s390x (looked for qemu-s390x-static and qemu-s390x)" >&2
+            exit 1
+          fi
+          echo "QEMU_EXEC=$q" >> "$GITHUB_ENV"
 
       - name: Regenerate assembly and check it is committed
         run: |
@@ -307,7 +392,9 @@ jobs:
       - name: Test vector SIMD (runtime under qemu-s390x, big-endian)
         env:
           QEMU_CPU: max
-        run: GOARCH=s390x go test -exec=qemu-s390x-static ./examples/simd/s390x/... ./examples/fft/s390x/...
+        run: |
+          echo "running s390x under $QEMU_EXEC"
+          GOARCH=s390x go test -exec "$QEMU_EXEC" ./examples/simd/s390x/... ./examples/fft/s390x/...
 
   # wasm-e2e regenerates each shipped wasm kernel from the pinned generator
   # (./examples/wasm/<kernel>) and drift-gates the committed .wat.golden
