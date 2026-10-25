@@ -134,6 +134,10 @@ type Arch struct {
 	// mnemonic and pads the operands to this many columns (s390x.s:
 	// "\tVFADB\tV1, V2, V3              // ...", 24).
 	OperandPad int
+	// InsnPad, when not zero, pads the whole instruction to this many
+	// columns instead of 32 (arm64enc.s: "\tVFMLA V6.S[0], F2, F14" and its
+	// neighbours put the comment at column 44).
+	InsnPad int
 
 	insns []*Insn
 }
@@ -182,7 +186,11 @@ func (a *Arch) TestdataLine(in *Insn, c Case) string {
 		return fmt.Sprintf("\t%s\t%-*s// %s", mnemonic, a.OperandPad, operands, a.Hex(c.Want))
 	}
 	if !a.TabbedTestdata {
-		return fmt.Sprintf("\t%-32s// %s", insn, a.Hex(c.Want))
+		pad := 32
+		if a.InsnPad != 0 {
+			pad = a.InsnPad
+		}
+		return fmt.Sprintf("\t%-*s// %s", pad, insn, a.Hex(c.Want))
 	}
 	// Operands start at column 16, with tabs every 8 columns.
 	mnemonic, operands, _ := strings.Cut(insn, " ")

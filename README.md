@@ -114,6 +114,22 @@ arrangement (four float32 lanes) are `VFADD4S`, `VFSUB4S`, `VFMUL4S`,
 `VFNEG4S`, `VFMLA4S` and `VFMLS4S`, checked against the system assembler the
 same way.
 
+**arm64 multiply by element, which the Go assembler lacks**: `cmd/asm` has
+the vector-by-vector `VFMLA`/`VFMLS`/`VFMUL` but not their indexed forms
+(`fmla vd.2d, vn.2d, vm.d[i]`: every lane times one lane of Vm, the broadcast
+a GEMM micro-kernel needs). `Builder.VFMLAElem2D`, `VFMLSElem2D`,
+`VFMULElem2D` and their `.4S` counterparts `VFMLAElem4S`, `VFMLSElem4S`,
+`VFMULElem4S` take `(d, n, m, index)` in A64 order and emit `WORD`s. Vm is any
+of V0–V31, and the index is 0–3 for `.4S` and 0–1 for `.2D`. Each `WORD`
+carries the spelling from [CL 764224](https://go.dev/cl/764224) (Jonathan
+Swinney) as its comment, for example `VFMLA V20.D[0], V16.D2, V0.D2`. The 76
+reference encodings come from `llvm-mc` 23, and GNU as 2.44 agrees on every
+case. They include the sixteen `WORD`s go-ndarray's GEMM kernel writes by hand.
+CL 764224 patchset 6, applied to master with the two CLs it is stacked on,
+assembles all 76 identically (`goasmgap verify`). That CL is not one of ours,
+so it is not in `goasm-patches/cls.txt`. The weekly check reports the day
+master or a release assembles these forms.
+
 **ppc64le VSX float64 arithmetic the Go assembler lacks**: `cmd/asm` has the
 VSX loads, stores and permutes (`LXVD2X`, `LXVDSX`, `STXVD2X`, `XXPERMDI`) but
 no vector double arithmetic. `Builder.XVADDDP`, `XVSUBDP`, `XVMULDP`,
