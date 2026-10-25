@@ -91,6 +91,15 @@ jobs:
           declare -A mailed
           while read -r cl patch; do
             mailed[$patch]=1
+            # A merged CL is already in master: applying it again fails git am
+            # (845145, merged 2026-10-20). An abandoned one is not applied
+            # either; the report job raises it.
+            status=$(curl -fsS "https://go-review.googlesource.com/changes/$cl" | tail -c +5 | jq -r .status)
+            case "$status" in
+              NEW) ;;
+              MERGED|ABANDONED) echo "CL $cl is $status: not applied"; continue ;;
+              *) echo "::error::CL $cl: unexpected status '$status'"; exit 1 ;;
+            esac
             curl -fsS "https://go-review.googlesource.com/changes/$cl/revisions/current/patch?download" | base64 -d > "$dir/cl-$cl.patch"
           done < <(grep -vE '^\s*(#|$)' goasm-patches/cls.txt)
           for p in goasm-patches/*.patch; do
