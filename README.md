@@ -159,6 +159,15 @@ The encodings are pinned against GNU as 2.43 on a Loongson 3C5000L (32 cases),
 and the example kernels in `examples/simd/loong64` were run on that machine
 against `math.FMA`, with bit-identical results.
 
+**loong64 privileged CSR access** (bare-metal code at PLV0): `Builder.CSRRD`,
+`CSRWR` and `CSRXCHG` emit `csrrd`, `csrwr` and `csrxchg` as `WORD`s, because
+`cmd/asm` has none of them. tamago's bare-metal loong64 port writes the same
+`WORD`s by hand. The CSR number is 0 to 0x3fff. `CSRXCHG` refuses mask register
+0 or 1, which would encode `csrrd` or `csrwr`. The 19 reference encodings come
+from GNU as 2.44, and `llvm-mc` 23 agrees on every case. They are proposed for
+`cmd/asm` as `CSRRD $csr, Rd`, `CSRWR $csr, Rd` and `CSRXCHG $csr, Rj, Rd` in
+[CL 853786](https://go.dev/cl/853786).
+
 **Instructions `cmd/asm` lacks are transitional.** Every `WORD` above has an
 entry in `internal/gap`: its encoding, the independent references, the
 opcode mask, and the Plan 9 spelling proposed upstream. `tools/goasmgap`
@@ -168,14 +177,6 @@ works from that registry:
   Go gives it;
 - it writes the `cmd/asm` test lines for an upstream patch;
 - it holds a toolchain to every reference case.
-
-The registry also holds instructions that hand-written Go assembly needs and
-no `Builder` method emits. The loong64 CSR access instructions `csrrd`,
-`csrwr` and `csrxchg` are an example: tamago's bare-metal loong64 port
-writes them as `WORD`s. Their 19 reference encodings come from GNU as 2.44,
-and `llvm-mc` 23 agrees on every case. They are proposed for `cmd/asm` as
-`CSRRD $csr, Rd`, `CSRWR $csr, Rd` and `CSRXCHG $csr, Rj, Rd` in
-[CL 853786](https://go.dev/cl/853786).
 
 The patches live in [`goasm-patches/`](goasm-patches/). A weekly workflow
 opens an issue when a Go release or master gains one of these instructions,

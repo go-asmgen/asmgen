@@ -16,6 +16,9 @@ func TestLASXEmits(t *testing.T) {
 		"vfmadd.d":   func(b *Builder, a []int) { b.VFMADDD(a[0], a[1], a[2], a[3]) },
 		"xvldrepl.d": func(b *Builder, a []int) { b.XVLDREPLD(a[0], a[1], a[2]) },
 		"vldrepl.d":  func(b *Builder, a []int) { b.VLDREPLD(a[0], a[1], a[2]) },
+		"csrrd":      func(b *Builder, a []int) { b.CSRRD(a[0], a[1]) },
+		"csrwr":      func(b *Builder, a []int) { b.CSRWR(a[0], a[1]) },
+		"csrxchg":    func(b *Builder, a []int) { b.CSRXCHG(a[0], a[1], a[2]) },
 	}
 	for _, in := range gap.ArchOf("loong64").Insns() {
 		emit, ok := ops[in.ISA]
@@ -51,6 +54,8 @@ func TestLASXRefusesWhatDoesNotEncode(t *testing.T) {
 		"offset not ×8":    func(b *Builder) { b.XVLDREPLD(0, 4, 4) },
 		"offset 2048":      func(b *Builder) { b.XVLDREPLD(0, 4, 2048) },
 		"offset -2056":     func(b *Builder) { b.VLDREPLD(0, 4, -2056) },
+		"CSR 0x4000":       func(b *Builder) { b.CSRRD(4, 0x4000) },
+		"csrxchg mask R1":  func(b *Builder) { b.CSRXCHG(4, 1, 0) },
 	} {
 		func() {
 			defer func() {
