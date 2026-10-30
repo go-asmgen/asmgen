@@ -3,6 +3,7 @@
 # see), not the local file, and reports a CL that is waiting for a reply.
 # A MERGED or ABANDONED CL is not applied (master already holds a merged one).
 # 845145 was merged on 2026-10-20 as c9f4d3fd64 and ships in Go 1.28.
+# 846285 was merged on 2026-10-29 as b082320566 and ships in Go 1.28.
 845145 ppc64-vsx-dp.patch
 845165 loong64-vfmadd-vldrepl.patch
 845166 loong64-vstelm-range.patch
