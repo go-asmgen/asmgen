@@ -17,6 +17,13 @@ import "fmt"
 
 const loong64Source = "GNU as 2.43 (Debian, Loongson 3C5000L), read back with objdump; llvm-mc 22.1.5 agrees on every case"
 
+// loong64SourceS is the source of the float32 (.s) fused multiply-adds: the
+// Loongson host was unreachable when they were added, so they come from llvm-mc,
+// which in the same run reproduced the GNU as words held for vfmadd.d and
+// xvfmadd.d, and match the cases goasm-patches/loong64-vfmadd-vldrepl.patch
+// mailed for VFMADDF and XVFMADDF.
+const loong64SourceS = "llvm-mc 23.1.2 --triple=loongarch64 -mattr=+lasx --show-encoding (control: the vfmadd.d/xvfmadd.d GNU as words reproduce in the same run)"
+
 func init() {
 	a := &Arch{Name: "loong64", GOARCH: []string{"loong64"}, Testdata: "loong64enc1.s", TabbedTestdata: true}
 	a.insns = append(a.insns, &Insn{
@@ -49,6 +56,38 @@ func init() {
 			{[]int{0, 0, 0, 31}, 0x0a2f8000},    // xvfmadd.d $xr0,$xr0,$xr0,$xr31
 			{[]int{17, 9, 26, 5}, 0x0a22e931},   // xvfmadd.d $xr17,$xr9,$xr26,$xr5
 			{[]int{31, 31, 31, 31}, 0x0a2fffff}, // xvfmadd.d $xr31,$xr31,$xr31,$xr31
+		},
+	})
+	a.insns = append(a.insns, &Insn{
+		Arch: "loong64", ISA: "vfmadd.s", Plan9: "VFMADDF V{3}, V{2}, V{1}, V{0}",
+		Mask: 0xfff00000, Bits: 0x09100000,
+		Encode: func(ops ...int) uint64 { return r4(0x09100000, ops[0], ops[1], ops[2], ops[3]) },
+		Source: loong64SourceS,
+		Golden: []Case{
+			{[]int{0, 0, 0, 0}, 0x09100000},     // vfmadd.s $vr0,$vr0,$vr0,$vr0
+			{[]int{3, 2, 1, 4}, 0x09120443},     // vfmadd.s $vr3,$vr2,$vr1,$vr4
+			{[]int{31, 0, 0, 0}, 0x0910001f},    // vfmadd.s $vr31,$vr0,$vr0,$vr0
+			{[]int{0, 31, 0, 0}, 0x091003e0},    // vfmadd.s $vr0,$vr31,$vr0,$vr0
+			{[]int{0, 0, 31, 0}, 0x09107c00},    // vfmadd.s $vr0,$vr0,$vr31,$vr0
+			{[]int{0, 0, 0, 31}, 0x091f8000},    // vfmadd.s $vr0,$vr0,$vr0,$vr31
+			{[]int{17, 9, 26, 5}, 0x0912e931},   // vfmadd.s $vr17,$vr9,$vr26,$vr5
+			{[]int{31, 31, 31, 31}, 0x091fffff}, // vfmadd.s $vr31,$vr31,$vr31,$vr31
+		},
+	})
+	a.insns = append(a.insns, &Insn{
+		Arch: "loong64", ISA: "xvfmadd.s", Plan9: "XVFMADDF X{3}, X{2}, X{1}, X{0}",
+		Mask: 0xfff00000, Bits: 0x0a100000,
+		Encode: func(ops ...int) uint64 { return r4(0x0a100000, ops[0], ops[1], ops[2], ops[3]) },
+		Source: loong64SourceS,
+		Golden: []Case{
+			{[]int{0, 0, 0, 0}, 0x0a100000},     // xvfmadd.s $xr0,$xr0,$xr0,$xr0
+			{[]int{3, 2, 1, 4}, 0x0a120443},     // xvfmadd.s $xr3,$xr2,$xr1,$xr4
+			{[]int{31, 0, 0, 0}, 0x0a10001f},    // xvfmadd.s $xr31,$xr0,$xr0,$xr0
+			{[]int{0, 31, 0, 0}, 0x0a1003e0},    // xvfmadd.s $xr0,$xr31,$xr0,$xr0
+			{[]int{0, 0, 31, 0}, 0x0a107c00},    // xvfmadd.s $xr0,$xr0,$xr31,$xr0
+			{[]int{0, 0, 0, 31}, 0x0a1f8000},    // xvfmadd.s $xr0,$xr0,$xr0,$xr31
+			{[]int{17, 9, 26, 5}, 0x0a12e931},   // xvfmadd.s $xr17,$xr9,$xr26,$xr5
+			{[]int{31, 31, 31, 31}, 0x0a1fffff}, // xvfmadd.s $xr31,$xr31,$xr31,$xr31
 		},
 	})
 	a.insns = append(a.insns, &Insn{

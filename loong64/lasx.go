@@ -29,6 +29,13 @@ func (b *Builder) XVFMADDD(d, j, k, a int) *Builder { return b.word("xvfmadd.d",
 // VFMADDD emits vfmadd.d: V[d] = V[j] × V[k] + V[a], two float64 lanes, fused.
 func (b *Builder) VFMADDD(d, j, k, a int) *Builder { return b.word("vfmadd.d", d, j, k, a) }
 
+// XVFMADDF emits xvfmadd.s: X[d] = X[j] × X[k] + X[a], eight float32 lanes,
+// fused (one rounding).
+func (b *Builder) XVFMADDF(d, j, k, a int) *Builder { return b.word("xvfmadd.s", d, j, k, a) }
+
+// VFMADDF emits vfmadd.s: V[d] = V[j] × V[k] + V[a], four float32 lanes, fused.
+func (b *Builder) VFMADDF(d, j, k, a int) *Builder { return b.word("vfmadd.s", d, j, k, a) }
+
 // XVLDREPLD emits xvldrepl.d: the float64 at off(R[rj]) in all four lanes of
 // X[d]. off is a multiple of 8 in [-2048, 2040].
 func (b *Builder) XVLDREPLD(d, rj, off int) *Builder { return b.ldrepl("xvldrepl.d", d, rj, off) }
