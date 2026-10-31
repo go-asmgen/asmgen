@@ -165,7 +165,8 @@ arithmetic, `math.Sqrt` and an exactly rounded fused reference bit for bit, over
 8.4M lanes. A caller must check `cpu.S390X.HasVXE` before using them.
 
 **loong64 LSX/LASX fused multiply-add and broadcast load**:
-`Builder.XVFMADDD`/`VFMADDD` (fused, four/two lanes) are `WORD`s, because
+`Builder.XVFMADDD`/`VFMADDD` (float64, four/two lanes) and
+`XVFMADDF`/`VFMADDF` (float32, eight/four lanes) are `WORD`s, because
 `cmd/asm` has no vector float FMA (`VMADDV`/`XVMADDV` are the integer ones).
 `XVLDREPLD`/`VLDREPLD` (one float64 into every lane) emit `XVMOVQ off(R),
 X.V4` / `VMOVQ off(R), V.V2`, which is how `cmd/asm` spells `xvldrepl.d` /
