@@ -14,6 +14,8 @@ func TestLASXEmits(t *testing.T) {
 	ops := map[string]func(*Builder, []int){
 		"xvfmadd.d":  func(b *Builder, a []int) { b.XVFMADDD(a[0], a[1], a[2], a[3]) },
 		"vfmadd.d":   func(b *Builder, a []int) { b.VFMADDD(a[0], a[1], a[2], a[3]) },
+		"xvfmadd.s":  func(b *Builder, a []int) { b.XVFMADDF(a[0], a[1], a[2], a[3]) },
+		"vfmadd.s":   func(b *Builder, a []int) { b.VFMADDF(a[0], a[1], a[2], a[3]) },
 		"xvldrepl.d": func(b *Builder, a []int) { b.XVLDREPLD(a[0], a[1], a[2]) },
 		"vldrepl.d":  func(b *Builder, a []int) { b.VLDREPLD(a[0], a[1], a[2]) },
 		"csrrd":      func(b *Builder, a []int) { b.CSRRD(a[0], a[1]) },
@@ -48,6 +50,8 @@ func TestLASXRefusesWhatDoesNotEncode(t *testing.T) {
 	for name, f := range map[string]func(*Builder){
 		"vector 32":        func(b *Builder) { b.XVFMADDD(32, 0, 0, 0) },
 		"vector -1":        func(b *Builder) { b.VFMADDD(0, 0, 0, -1) },
+		"vector 32 (.s)":   func(b *Builder) { b.XVFMADDF(0, 32, 0, 0) },
+		"vector -1 (.s)":   func(b *Builder) { b.VFMADDF(-1, 0, 0, 0) },
 		"vector 32 (load)": func(b *Builder) { b.XVLDREPLD(32, 4, 0) },
 		"general 32":       func(b *Builder) { b.VLDREPLD(0, 32, 0) },
 		"general -1":       func(b *Builder) { b.VLDREPLD(0, -1, 0) },
