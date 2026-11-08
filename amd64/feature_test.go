@@ -264,6 +264,48 @@ func TestVendorProbeSpellsTheStringInCPUIDOrder(t *testing.T) {
 	}
 }
 
+// TestFamilyProbeAddsTheExtendedFamilyOnlyForBaseF: the sequence is the SDM's
+// DisplayFamily rule (base 0xF adds bits 27:20), and a probe that always added
+// them would read family 6 CPUs as 6 plus whatever model bits sit there.
+func TestFamilyProbeAddsTheExtendedFamilyOnlyForBaseF(t *testing.T) {
+	f := emit.NewFile("amd64")
+	f.Add(FamilyProbe("isZen4Family", 0x19))
+	got := body(f.String())
+	want := []string{
+		"TEXT ·isZen4Family(SB), NOSPLIT, $0-1",
+		"MOVB $0, ret+0(FP)",
+		"MOVL $1, AX",
+		"CPUID",
+		"MOVL AX, BX",
+		"SHRL $8, BX",
+		"ANDL $0xF, BX // base family",
+		"CMPL BX, $0xF",
+		"JNE isZen4Family_base",
+		"SHRL $20, AX",
+		"ANDL $0xFF, AX // extended family",
+		"ADDL AX, BX",
+		"isZen4Family_base:",
+		"CMPL BX, $0x19 // family",
+		"JNE isZen4Family_other",
+		"MOVB $1, ret+0(FP)",
+		"isZen4Family_other:",
+		"RET",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("FamilyProbe(0x19):\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// TestFamilyProbeRefusesAFamilyThatDoesNotFit: 4 base + 8 extended bits.
+func TestFamilyProbeRefusesAFamilyThatDoesNotFit(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("FamilyProbe(0x200) did not panic")
+		}
+	}()
+	FamilyProbe("p", 0x200)
+}
+
 // TestVendorProbeRefusesAWrongLength: CPUID leaf 0 holds exactly twelve bytes.
 func TestVendorProbeRefusesAWrongLength(t *testing.T) {
 	for _, v := range []string{"", "Intel", "GenuineIntel!"} {
