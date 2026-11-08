@@ -140,7 +140,7 @@ func TestFeatureString(t *testing.T) {
 	for _, c := range []struct {
 		f    Feature
 		want string
-	}{{AVX2, "AVX2"}, {POPCNT, "POPCNT"}, {AVX512F, "AVX512F"}, {FMA, "FMA"}, {Feature(99), "Feature(?)"}} {
+	}{{AVX2, "AVX2"}, {POPCNT, "POPCNT"}, {AVX512F, "AVX512F"}, {FMA, "FMA"}, {AVX512DQ, "AVX512DQ"}, {Feature(99), "Feature(?)"}} {
 		if got := c.f.String(); got != c.want {
 			t.Errorf("Feature(%d).String() = %q, want %q", c.f, got, c.want)
 		}
@@ -194,6 +194,32 @@ func TestAVX512FChecksAllFiveStateComponents(t *testing.T) {
 	}
 	if strings.Contains(s, "ANDL $6, AX") {
 		t.Errorf("the AVX512F probe checks only AVX2's XCR0 bits:\n%s", s)
+	}
+}
+
+// TestAVX512DQTestsBothLeaf7Bits: KMOVB is DQ, and Knights Landing has F
+// without DQ, so the probe must require EBX bits 16 and 17 together, after the
+// same OS checks AVX512F makes, and must not settle for F's single-bit test.
+func TestAVX512DQTestsBothLeaf7Bits(t *testing.T) {
+	f := emit.NewFile("amd64")
+	f.Add(FeatureProbe("hasAVX512DQ", AVX512DQ))
+	s := f.String()
+	at := -1
+	for _, want := range []string{
+		"CMPL AX, $7", "ANDL $0x18000000, CX", "XGETBV", "ANDL $0xE6, AX",
+		"CMPL AX, $0xE6", "ANDL $0x30000, BX", "CMPL BX, $0x30000",
+	} {
+		i := strings.Index(s, want)
+		if i < 0 {
+			t.Fatalf("the AVX512DQ probe does not contain %q:\n%s", want, s)
+		}
+		if i < at {
+			t.Errorf("%q comes before the step that must precede it:\n%s", want, s)
+		}
+		at = i
+	}
+	if strings.Contains(s, "TESTL $0x10000, BX") {
+		t.Errorf("the AVX512DQ probe tests only the AVX512F bit:\n%s", s)
 	}
 }
 
