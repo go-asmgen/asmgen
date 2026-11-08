@@ -93,9 +93,11 @@ CPUID/XGETBV gate a dispatched kernel needs in front of it, as a `func() bool`,
 so a package that wants no runtime dependency does not have to hand-write CPUID
 to get one. The OS half is the part hand-rolled probes drop: a CPU can report
 AVX2 on a kernel that does not save YMM state. `POPCNT`, `FMA` (CPUID leaf 1,
-separate from AVX2's leaf-7 bit) and `AVX512F` are
+separate from AVX2's leaf-7 bit), `AVX512F` and `AVX512DQ` are
 there too (`AVX512F` also requires the OS to save opmask and ZMM state, XCR0
-mask 0xE6; on macOS it answers false, since Darwin enables that state lazily),
+mask 0xE6; on macOS it answers false, since Darwin enables that state lazily;
+`AVX512DQ` is F plus CPUID.7.0:EBX bit 17, what a kernel executing `KMOVB`
+needs: Knights Landing has F without DQ),
 and the list stops at what has callers. `amd64.VendorProbe(name, "GenuineIntel")`
 (v0.12.0) compares CPUID leaf 0's vendor string, for tuning choices measured to
 differ by vendor (go-fft's radix rule); it never gates correctness, since a

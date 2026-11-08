@@ -51,6 +51,15 @@ const (
 	// Piledriver has both, but a hypervisor can mask one without the other.
 	// Callers: go-ndarray/ndarray's GEMM micro-kernel.
 	FMA
+	// AVX512DQ reports AVX512F and the AVX-512 doubleword/quadword extension
+	// (CPUID.7.0:EBX bit 17), with the OS state AVX512F needs. Callers: go-fft/fft
+	// kernels that execute KMOVB (an opmask move from a general register) or
+	// VXORPD/VORPD/VANDPD on ZMM, which are DQ and not F. Intel Knights Landing
+	// and Knights Mill have F without DQ (Intel SDM vol. 2, instruction set
+	// reference: KMOVB, "AVX512DQ"), so an AVX512F gate in front of such a kernel
+	// raises #UD there. The probe answers false on macOS for the reason AVX512F
+	// does.
+	AVX512DQ
 )
 
 // The list stops there on purpose. Every entry costs a probe sequence that has
@@ -68,6 +77,8 @@ func (f Feature) String() string {
 		return "AVX512F"
 	case FMA:
 		return "FMA"
+	case AVX512DQ:
+		return "AVX512DQ"
 	}
 	return "Feature(?)"
 }
@@ -130,7 +141,7 @@ func FeatureProbe(name string, f Feature) *emit.Function {
 		b.Raw("TESTL $0x20, BX // AVX2")
 		b.Raw("JZ %s", done)
 
-	case AVX512F:
+	case AVX512F, AVX512DQ:
 		// Leaf 7 must exist before it is read, as for AVX2.
 		b.Raw("XORL AX, AX")
 		b.Raw("CPUID")
@@ -155,12 +166,18 @@ func FeatureProbe(name string, f Feature) *emit.Function {
 		b.Raw("CMPL AX, $0xE6")
 		b.Raw("JNE %s", done)
 
-		// Leaf 7, EBX bit 16.
+		// Leaf 7, EBX bit 16 (F); AVX512DQ also needs bit 17, both in one mask.
 		b.Raw("MOVL $7, AX")
 		b.Raw("XORL CX, CX")
 		b.Raw("CPUID")
-		b.Raw("TESTL $0x10000, BX // AVX512F")
-		b.Raw("JZ %s", done)
+		if f == AVX512DQ {
+			b.Raw("ANDL $0x30000, BX // AVX512F and AVX512DQ")
+			b.Raw("CMPL BX, $0x30000")
+			b.Raw("JNE %s", done)
+		} else {
+			b.Raw("TESTL $0x10000, BX // AVX512F")
+			b.Raw("JZ %s", done)
+		}
 
 	case FMA:
 		// Leaf 1 alone: FMA3 is a leaf-1 ECX bit, so unlike AVX2 there is no
