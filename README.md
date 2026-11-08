@@ -99,7 +99,10 @@ mask 0xE6; on macOS it answers false, since Darwin enables that state lazily),
 and the list stops at what has callers. `amd64.VendorProbe(name, "GenuineIntel")`
 (v0.12.0) compares CPUID leaf 0's vendor string, for tuning choices measured to
 differ by vendor (go-fft's radix rule); it never gates correctness, since a
-hypervisor may report its own vendor.
+hypervisor may report its own vendor. `amd64.FamilyProbe(name, 0x19)` (v0.23.1)
+reads the displayed CPU family (CPUID leaf 1, base plus extended family for base
+0xF) the same way, to tell AMD Zen 4 (0x19 with AVX-512) from Zen 5 (0x1A);
+pair it with `VendorProbe`, since family numbers are per vendor.
 
 **arm64 vector float64 arithmetic**: `Builder.VFADD2D`, `VFSUB2D`, `VFMUL2D`,
 `VFNEG2D`, `VFMLA2D` and `VFMLS2D` emit `VFADD`/`VFSUB`/`VFMUL`/`VFNEG`/`VFMLA`/

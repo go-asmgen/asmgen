@@ -193,6 +193,43 @@ func FeatureProbe(name string, f Feature) *emit.Function {
 	return b.Func()
 }
 
+// FamilyProbe returns a `func() bool` reporting whether the processor's
+// displayed CPU family (CPUID leaf 1, EAX) is family: the base family, bits
+// 11:8, plus the extended family, bits 27:20, when the base family is 0xF (Intel
+// SDM vol. 2A, CPUID leaf 01H; AMD APM vol. 3, CPUID Fn0000_0001_EAX). AMD
+// Zen 3 and Zen 4 both report 0x19, Zen 5 0x1A. Like VendorProbe it is for
+// tuning choices measured to differ between cores, never for correctness, and a
+// hypervisor may report another family: false means "not known to be this
+// family". Family numbers are only meaningful per vendor, so a caller pairs it
+// with VendorProbe.
+func FamilyProbe(name string, family uint32) *emit.Function {
+	if family > 0xFF+0xF {
+		panic(fmt.Sprintf("amd64.FamilyProbe: family %#x does not fit CPUID's 4+8 bit fields", family))
+	}
+	sig := Layout(nil, nil, []string{"ret"}, []Type{Uint8})
+	b := NewFunc(name, sig, 0)
+	done := name + "_other"
+	base := name + "_base"
+	b.Raw("MOVB $0, ret+0(FP)")
+	b.Raw("MOVL $1, AX")
+	b.Raw("CPUID")
+	b.Raw("MOVL AX, BX")
+	b.Raw("SHRL $8, BX")
+	b.Raw("ANDL $0xF, BX // base family")
+	b.Raw("CMPL BX, $0xF")
+	b.Raw("JNE %s", base)
+	b.Raw("SHRL $20, AX")
+	b.Raw("ANDL $0xFF, AX // extended family")
+	b.Raw("ADDL AX, BX")
+	b.Label(base)
+	b.Raw("CMPL BX, $0x%x // family", family)
+	b.Raw("JNE %s", done)
+	b.Raw("MOVB $1, ret+0(FP)")
+	b.Label(done)
+	b.Ret()
+	return b.Func()
+}
+
 // VendorProbe returns a `func() bool` reporting whether the processor's CPUID
 // vendor string (leaf 0) is vendor: "GenuineIntel", "AuthenticAMD",
 // "HygonGenuine", and so on. It is for tuning choices measured to differ by
