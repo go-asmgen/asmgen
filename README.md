@@ -106,6 +106,18 @@ reads the displayed CPU family (CPUID leaf 1, base plus extended family for base
 0xF) the same way, to tell AMD Zen 4 (0x19 with AVX-512) from Zen 5 (0x1A);
 pair it with `VendorProbe`, since family numbers are per vendor.
 
+**amd64 256-bit integer ops (AVX2)**: `amd64.YReg` (`Y0`..`Y15`) and the
+`Builder` methods `VPXOR`, `VPAND`, `VPOR`, `VPANDN`, `VPADDD`, `VPCMPEQD`/`Ones`,
+`VPSLLD`, `VPSRLD`, `RotL32` (AVX2 has no vector rotate: shift, shift, or),
+`VMOVDQA`/`VMOVDQU`/`VMOVDQUStore`, `VPBROADCASTD`, the four `VPUNPCK*` forms,
+`Transpose4x32` (the 4x4 transpose of 32-bit words inside each 128-bit half, to
+put word `w` of eight 16-byte blocks in one register) and `VZEROUPPER`. Operands
+are in Intel order, destination first, and are emitted reversed as Plan 9 wants;
+a register past `Y15` or a shift count past 31 panics at generation time instead
+of in the assembler. They are what a bitsliced cipher is written in
+(go-encryptions/serpent's 8-block kernel). `examples/simd/amd64` runs them on an
+AVX2 machine against Go's own operators.
+
 **arm64 vector float64 arithmetic**: `Builder.VFADD2D`, `VFSUB2D`, `VFMUL2D`,
 `VFNEG2D`, `VFMLA2D` and `VFMLS2D` emit `VFADD`/`VFSUB`/`VFMUL`/`VFNEG`/`VFMLA`/
 `VFMLS` on the `.D2` arrangement and leave the encoding to `cmd/asm`, which has

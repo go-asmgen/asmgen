@@ -41,6 +41,37 @@ func main() {
 		Ret()
 	f.Add(avx.Func())
 
+	// The typed 256-bit ops: the four bitwise forms, a rotate, and the 4x4
+	// transpose of 32-bit words a bitsliced cipher loads its blocks with.
+	logic := amd64.NewFunc("ymmLogic", ptrSig(), 0)
+	logic.LoadArg("a", "AX").LoadArg("b", "BX").LoadArg("out", "CX").
+		VMOVDQU(amd64.Y0, "(AX)").
+		VMOVDQU(amd64.Y1, "(BX)").
+		VPXOR(amd64.Y2, amd64.Y0, amd64.Y1).VMOVDQUStore("(CX)", amd64.Y2).
+		VPAND(amd64.Y2, amd64.Y0, amd64.Y1).VMOVDQUStore("32(CX)", amd64.Y2).
+		VPOR(amd64.Y2, amd64.Y0, amd64.Y1).VMOVDQUStore("64(CX)", amd64.Y2).
+		VPANDN(amd64.Y2, amd64.Y0, amd64.Y1).VMOVDQUStore("96(CX)", amd64.Y2).
+		Ones(amd64.Y3).VPXOR(amd64.Y3, amd64.Y3, amd64.Y0).VMOVDQUStore("128(CX)", amd64.Y3).
+		RotL32(amd64.Y4, amd64.Y0, 13, amd64.Y5).VMOVDQUStore("160(CX)", amd64.Y4).
+		VPSLLD(amd64.Y6, amd64.Y0, 3).VMOVDQUStore("192(CX)", amd64.Y6).
+		VPSRLD(amd64.Y6, amd64.Y0, 7).VMOVDQUStore("224(CX)", amd64.Y6).
+		VPBROADCASTD(amd64.Y7, "4(BX)").VMOVDQUStore("256(CX)", amd64.Y7).
+		VZEROUPPER().
+		Ret()
+	f.Add(logic.Func())
+
+	tr := amd64.NewFunc("ymmTranspose", amd64.Layout(
+		[]string{"p"}, []amd64.Type{amd64.Ptr}, nil, nil), 0)
+	tr.LoadArg("p", "AX").
+		VMOVDQU(amd64.Y0, "(AX)").VMOVDQU(amd64.Y1, "32(AX)").
+		VMOVDQU(amd64.Y2, "64(AX)").VMOVDQU(amd64.Y3, "96(AX)").
+		Transpose4x32(amd64.Y0, amd64.Y1, amd64.Y2, amd64.Y3, amd64.Y4, amd64.Y5).
+		VMOVDQUStore("(AX)", amd64.Y0).VMOVDQUStore("32(AX)", amd64.Y1).
+		VMOVDQUStore("64(AX)", amd64.Y2).VMOVDQUStore("96(AX)", amd64.Y3).
+		VZEROUPPER().
+		Ret()
+	f.Add(tr.Func())
+
 	// The gate in front of it. Without this the example calls a 256-bit
 	// instruction on whatever CPU runs it, which is an illegal instruction on
 	// anything older than Haswell -- the hazard every dispatched SIMD package
