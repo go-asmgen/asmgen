@@ -16,3 +16,11 @@ func addI32x8(a, b, out *[8]int32)
 //
 // addI32x8 must not be called when this is false.
 func hasAVX2() bool
+
+// ymmLogic runs the typed 256-bit builders over eight uint32 lanes: out holds,
+// in order, a^b, a&b, a|b, ^a&b, ^a, rotl(a,13), a<<3, a>>7 and eight copies
+// of b[1], each as eight lanes. ymmTranspose transposes in place, inside each
+// 128-bit half, the 4x4 matrix of words whose rows are the four 32-byte
+// vectors of p. Neither may be called when hasAVX2 is false.
+func ymmLogic(a, b *[8]uint32, out *[9][8]uint32)
+func ymmTranspose(p *[4][8]uint32)
