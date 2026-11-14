@@ -190,8 +190,11 @@ func (b *Builder) VZEROUPPER() *Builder {
 // print it into the instruction text.
 func (b *Builder) yinsn(format string, args ...any) {
 	for i, a := range args {
-		if y, ok := a.(YReg); ok {
-			args[i] = y.String()
+		switch r := a.(type) {
+		case YReg:
+			args[i] = r.String()
+		case ZReg:
+			args[i] = r.String()
 		}
 	}
 	b.fn.Insn(format, args...)

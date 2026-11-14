@@ -118,6 +118,17 @@ of in the assembler. They are what a bitsliced cipher is written in
 (go-encryptions/serpent's 8-block kernel). `examples/simd/amd64` runs them on an
 AVX2 machine against Go's own operators.
 
+**amd64 512-bit integer ops (AVX-512F)**: `amd64.ZReg` (`Z0`..`Z31`) with
+`VPTERNLOGD` (one instruction for any three-input boolean function; the
+immediate is the truth table, bit `dst<<2|x<<1|y`), `VPROLD` (the native
+rotate), `VPXORD` and `VPXORDBcst` (XOR with a memory word broadcast to every
+lane, no separate broadcast), `VPADDD512`, the shifts `VPSLLD512`/`VPSRLD512`,
+`VMOVDQA32`/`VMOVDQU32`/`VMOVDQU32Store`, `VPBROADCASTD512`, the four
+`VPUNPCK*512` forms and `Transpose4x32Z` (the 4x4 transpose inside each 128-bit
+lane, putting word `w` of sixteen blocks in one register). Same conventions as
+the YMM ops; gate a kernel with `FeatureProbe(name, AVX512F)`. Run on a Zen 4
+in `examples/simd/amd64`.
+
 **arm64 vector float64 arithmetic**: `Builder.VFADD2D`, `VFSUB2D`, `VFMUL2D`,
 `VFNEG2D`, `VFMLA2D` and `VFMLS2D` emit `VFADD`/`VFSUB`/`VFMUL`/`VFNEG`/`VFMLA`/
 `VFMLS` on the `.D2` arrangement and leave the encoding to `cmd/asm`, which has
