@@ -72,6 +72,37 @@ func main() {
 		Ret()
 	f.Add(tr.Func())
 
+	// AVX-512F: ternary logic, the native rotate, an embedded-broadcast XOR
+	// and the 16-lane transpose.
+	zl := amd64.NewFunc("zmmLogic", ptrSig(), 0)
+	zl.LoadArg("a", "AX").LoadArg("b", "BX").LoadArg("out", "CX").
+		VMOVDQU32(amd64.Z0, "(AX)").
+		VMOVDQU32(amd64.Z1, "(BX)").
+		VMOVDQU32(amd64.Z2, "64(BX)").
+		VMOVDQA32(amd64.Z3, amd64.Z0).VPTERNLOGD(0x96, amd64.Z3, amd64.Z1, amd64.Z2).VMOVDQU32Store("(CX)", amd64.Z3).
+		VMOVDQA32(amd64.Z3, amd64.Z0).VPTERNLOGD(0xca, amd64.Z3, amd64.Z1, amd64.Z2).VMOVDQU32Store("64(CX)", amd64.Z3).
+		VPROLD(amd64.Z4, amd64.Z0, 13).VMOVDQU32Store("128(CX)", amd64.Z4).
+		VPXORDBcst(amd64.Z5, amd64.Z0, "4(BX)").VMOVDQU32Store("192(CX)", amd64.Z5).
+		VPSLLD512(amd64.Z6, amd64.Z0, 3).VPSRLD512(amd64.Z6, amd64.Z6, 1).VMOVDQU32Store("256(CX)", amd64.Z6).
+		VPADDD512(amd64.Z7, amd64.Z0, amd64.Z1).VMOVDQU32Store("320(CX)", amd64.Z7).
+		VPBROADCASTD512(amd64.Z8, "8(BX)").VMOVDQU32Store("384(CX)", amd64.Z8).
+		VZEROUPPER().
+		Ret()
+	f.Add(zl.Func())
+
+	zt := amd64.NewFunc("zmmTranspose", amd64.Layout(
+		[]string{"p"}, []amd64.Type{amd64.Ptr}, nil, nil), 0)
+	zt.LoadArg("p", "AX").
+		VMOVDQU32(amd64.Z0, "(AX)").VMOVDQU32(amd64.Z1, "64(AX)").
+		VMOVDQU32(amd64.Z2, "128(AX)").VMOVDQU32(amd64.Z3, "192(AX)").
+		Transpose4x32Z(amd64.Z0, amd64.Z1, amd64.Z2, amd64.Z3, amd64.Z4, amd64.Z5).
+		VMOVDQU32Store("(AX)", amd64.Z0).VMOVDQU32Store("64(AX)", amd64.Z1).
+		VMOVDQU32Store("128(AX)", amd64.Z2).VMOVDQU32Store("192(AX)", amd64.Z3).
+		VZEROUPPER().
+		Ret()
+	f.Add(zt.Func())
+	f.Add(amd64.FeatureProbe("hasAVX512F", amd64.AVX512F))
+
 	// The gate in front of it. Without this the example calls a 256-bit
 	// instruction on whatever CPU runs it, which is an illegal instruction on
 	// anything older than Haswell -- the hazard every dispatched SIMD package

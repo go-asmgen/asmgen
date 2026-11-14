@@ -24,3 +24,13 @@ func hasAVX2() bool
 // vectors of p. Neither may be called when hasAVX2 is false.
 func ymmLogic(a, b *[8]uint32, out *[9][8]uint32)
 func ymmTranspose(p *[4][8]uint32)
+
+// zmmLogic runs the typed 512-bit builders over sixteen uint32 lanes: with
+// a and b (b is 32 words, of which the first 16 are x, the next 16 y and
+// b[1], b[2] are broadcast), out holds a^x^y, a?x:y bitwise (dst=a), rotl(a,13),
+// a^b[1], (a<<3)>>1, a+x and sixteen copies of b[2]. zmmTranspose transposes
+// in place, inside each 128-bit lane, the 4x4 matrix of words whose rows are
+// the four 64-byte vectors of p. hasAVX512F gates both.
+func zmmLogic(a *[16]uint32, b *[32]uint32, out *[7][16]uint32)
+func zmmTranspose(p *[4][16]uint32)
+func hasAVX512F() bool
