@@ -256,8 +256,26 @@ func TestArm64Sqrshrun(t *testing.T) {
 	}
 }
 
+// SSHL: the spelling and WORD go-videodsp/kernels' weighting kernel emits,
+// and no arrangement matching another's words.
+func TestArm64Sshl(t *testing.T) {
+	if got := Lookup("arm64", "sshl.8h").Word(0, 0, 22); got != "WORD $0x4e764400 // VSSHL V22.H8, V0.H8, V0.H8" {
+		t.Errorf("Word = %q", got)
+	}
+	for _, f := range sshlForms {
+		for _, g := range sshlForms {
+			if g.name != f.name && Lookup("arm64", f.name).Matches(Lookup("arm64", g.name).Encode(3, 4, 5)) {
+				t.Errorf("%s matches a %s word", f.name, g.name)
+			}
+		}
+	}
+}
+
 func TestRefusals(t *testing.T) {
 	for name, f := range map[string]func(){
+		"sshl V32 m":            func() { Lookup("arm64", "sshl.8h").Encode(0, 0, 32) },
+		"sshl V-1 d":            func() { Lookup("arm64", "sshl.4s").Encode(-1, 0, 0) },
+		"sshl two operands":     func() { Lookup("arm64", "sshl.2d").Encode(0, 0) },
 		"sqrshrun shift 0":      func() { Lookup("arm64", "sqrshrun.8b").Encode(0, 0, 0) },
 		"sqrshrun .8b shift 9":  func() { Lookup("arm64", "sqrshrun.8b").Encode(0, 0, 9) },
 		"sqrshrun .4h shift 17": func() { Lookup("arm64", "sqrshrun.4h").Encode(0, 0, 17) },
