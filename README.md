@@ -164,6 +164,17 @@ assembles all 76 identically (`goasmgap verify`). That CL is not one of ours,
 so it is not in `goasm-patches/cls.txt`. The weekly check reports the day
 master or a release assembles these forms.
 
+**arm64 SQRSHRUN, which the Go assembler lacks**: signed saturating rounded
+shift right unsigned narrow, the fused last step of every fixed-point pixel
+filter (H.264's `Clip1Y((b1 + 16) >> 5)` is one `SQRSHRUN` with shift 5).
+`cmd/asm` has `VSQXTUN` and `VSRSHR` but not this form. `Builder.VSQRSHRUN8B`
+(`.8H` to `.8B`), `VSQRSHRUN4H` (`.4S` to `.4H`), `VSQRSHRUN2S` (`.2D` to
+`.2S`) and the high-half forms `VSQRSHRUN2x16B`, `VSQRSHRUN2x8H`,
+`VSQRSHRUN2x4S` take `(d, n, shift)` in A64 order, with the shift from 1 to the
+narrow lane width, and emit `WORD`s whose comment is the proposed spelling, for
+example `VSQRSHRUN $5, V6.H8, V16.B8`. The 24 reference encodings come from
+Apple clang 21's integrated assembler, read back with `otool -t`.
+
 **ppc64le VSX float64 arithmetic the Go assembler lacks**: `cmd/asm` has the
 VSX loads, stores and permutes (`LXVD2X`, `LXVDSX`, `STXVD2X`, `XXPERMDI`) but
 no vector double arithmetic. `Builder.XVADDDP`, `XVSUBDP`, `XVMULDP`,
