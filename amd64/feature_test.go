@@ -322,6 +322,38 @@ func TestFamilyProbeAddsTheExtendedFamilyOnlyForBaseF(t *testing.T) {
 	}
 }
 
+// TestSignatureProbeReturnsEAXOfLeaf1: the probe asks leaf 1, returns the raw EAX
+// through a 4-byte result (frame $0-4) and decodes nothing, so a caller's own
+// decoding of family, model and stepping stays testable in Go.
+func TestSignatureProbeReturnsEAXOfLeaf1(t *testing.T) {
+	f := emit.NewFile("amd64")
+	f.Add(SignatureProbe("cpuidSignature"))
+	got := body(f.String())
+	want := []string{
+		"TEXT ·cpuidSignature(SB), NOSPLIT, $0-4",
+		"MOVL $1, AX",
+		"XORL CX, CX",
+		"CPUID",
+		"MOVL AX, ret+0(FP)",
+		"RET",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("SignatureProbe:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// TestSignatureProbeSharesAFileWithTheOthers: two probes in one file do not
+// collide, and the signature probe adds no label.
+func TestSignatureProbeSharesAFileWithTheOthers(t *testing.T) {
+	f := emit.NewFile("amd64")
+	f.Add(FamilyProbe("isFamily19", 0x19))
+	f.Add(SignatureProbe("cpuidSignature"))
+	s := f.String()
+	if strings.Count(s, "TEXT ·") != 2 || strings.Contains(s, "cpuidSignature_") {
+		t.Fatalf("unexpected output:\n%s", s)
+	}
+}
+
 // TestFamilyProbeRefusesAFamilyThatDoesNotFit: 4 base + 8 extended bits.
 func TestFamilyProbeRefusesAFamilyThatDoesNotFit(t *testing.T) {
 	defer func() {

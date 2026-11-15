@@ -107,6 +107,11 @@ hypervisor may report its own vendor. `amd64.FamilyProbe(name, 0x19)` (v0.23.1)
 reads the displayed CPU family (CPUID leaf 1, base plus extended family for base
 0xF) the same way, to tell AMD Zen 4 (0x19 with AVX-512) from Zen 5 (0x1A);
 pair it with `VendorProbe`, since family numbers are per vendor.
+`amd64.SignatureProbe(name)` returns CPUID leaf 1's EAX as a `uint32` (stepping,
+model, family, extended model and family, undecoded), for tuning that depends on
+a model or a stepping, which the caller decodes in Go with its own tests; like
+the others it is never a correctness gate, and a hypervisor's named CPU model can
+report a signature the hardware under it does not have.
 
 **amd64 256-bit integer ops (AVX2)**: `amd64.YReg` (`Y0`..`Y15`) and the
 `Builder` methods `VPXOR`, `VPAND`, `VPOR`, `VPANDN`, `VPADDD`, `VPCMPEQD`/`Ones`,
