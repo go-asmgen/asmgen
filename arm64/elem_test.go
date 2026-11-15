@@ -14,6 +14,13 @@ var elemMethods = map[string]func(*Builder, []int){
 	"fmla.elem.4s": func(b *Builder, r []int) { b.VFMLAElem4S(r[0], r[1], r[2], r[3]) },
 	"fmls.elem.4s": func(b *Builder, r []int) { b.VFMLSElem4S(r[0], r[1], r[2], r[3]) },
 	"fmul.elem.4s": func(b *Builder, r []int) { b.VFMULElem4S(r[0], r[1], r[2], r[3]) },
+
+	"sqrshrun.8b":   func(b *Builder, r []int) { b.VSQRSHRUN8B(r[0], r[1], r[2]) },
+	"sqrshrun2.16b": func(b *Builder, r []int) { b.VSQRSHRUN2x16B(r[0], r[1], r[2]) },
+	"sqrshrun.4h":   func(b *Builder, r []int) { b.VSQRSHRUN4H(r[0], r[1], r[2]) },
+	"sqrshrun2.8h":  func(b *Builder, r []int) { b.VSQRSHRUN2x8H(r[0], r[1], r[2]) },
+	"sqrshrun.2s":   func(b *Builder, r []int) { b.VSQRSHRUN2S(r[0], r[1], r[2]) },
+	"sqrshrun2.4s":  func(b *Builder, r []int) { b.VSQRSHRUN2x4S(r[0], r[1], r[2]) },
 }
 
 // Every arm64 registry entry has a method, and each emits its own entry's

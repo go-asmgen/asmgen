@@ -26,6 +26,8 @@ import "fmt"
 
 const arm64Source = "llvm-mc 23.1.2 (-triple=aarch64 -show-encoding); GNU as 2.44 (Debian trixie, aarch64), read back with objdump, agrees on every case"
 
+const sqrshrunSource = "Apple clang 21.0.0 (clang-2100.4.1.1, LLVM integrated assembler, -target arm64-apple-macos), words read back with otool -t"
+
 func init() {
 	a := &Arch{Name: "arm64", GOARCH: []string{"arm64"}, Testdata: "arm64enc.s", InsnPad: 43}
 	for _, op := range []struct {
@@ -39,7 +41,65 @@ func init() {
 	} {
 		a.insns = append(a.insns, elemInsn(op.isa, op.plan9, op.opcode, false), elemInsn(op.isa, op.plan9, op.opcode, true))
 	}
+	for _, n := range sqrshrunForms {
+		a.insns = append(a.insns, sqrshrunInsn(n))
+	}
 	arches = append(arches, a)
+}
+
+type sqrshrunForm struct {
+	name       string // ISA name, with the destination arrangement
+	dst, src   string // Plan 9 arrangements of Vd and Vn
+	q          uint64
+	esize      uint // destination element size in bits
+	immh       uint64
+	immhMask   uint64
+	plan9Mnemo string
+}
+
+// sqrshrunForms are the six shift-by-immediate arrangements of SQRSHRUN
+// (signed saturating rounded shift right unsigned narrow) and its "2" form
+// (Arm ARM, "Advanced SIMD shift by immediate"):
+//
+//	0 Q 1 011110 immh immb 100011 Rn Rd
+//
+// Q = 0 writes the low half of Vd (SQRSHRUN), Q = 1 the high half
+// (SQRSHRUN2). The destination element size is fixed by the leading bit of
+// immh (0001 byte, 001x halfword, 01xx word) and the shift, 1 to the
+// destination element size in bits, is 2*size - immh:immb. It is
+// ((x + 2^(shift-1)) >> shift) of a signed wide element, clipped to the
+// unsigned range of the narrow one: the last step of the H.264 half-sample
+// filters (Clip1Y((b1 + 16) >> 5)), which go-videodsp/kernels writes as a
+// WORD. cmd/asm (Go 1.27.4) has VSQXTUN and VSRSHR but not this fused form.
+var sqrshrunForms = []sqrshrunForm{
+	{"sqrshrun.8b", "B8", "H8", 0, 8, 0x1 << 19, 0xf << 19, "VSQRSHRUN"},
+	{"sqrshrun2.16b", "B16", "H8", 1, 8, 0x1 << 19, 0xf << 19, "VSQRSHRUN2"},
+	{"sqrshrun.4h", "H4", "S4", 0, 16, 0x2 << 19, 0xe << 19, "VSQRSHRUN"},
+	{"sqrshrun2.8h", "H8", "S4", 1, 16, 0x2 << 19, 0xe << 19, "VSQRSHRUN2"},
+	{"sqrshrun.2s", "S2", "D2", 0, 32, 0x4 << 19, 0xc << 19, "VSQRSHRUN"},
+	{"sqrshrun2.4s", "S4", "D2", 1, 32, 0x4 << 19, 0xc << 19, "VSQRSHRUN2"},
+}
+
+// sqrshrunInsn is one arrangement; its operands, in A64 order, are Vd, Vn and
+// the shift.
+func sqrshrunInsn(f sqrshrunForm) *Insn {
+	base := 0x2f008c00 | f.q<<30 | f.immh
+	mask := uint64(0xff80fc00) | f.immhMask
+	return &Insn{
+		Arch: "arm64", ISA: f.name,
+		Plan9: f.plan9Mnemo + " ${2}, V{1}." + f.src + ", V{0}." + f.dst,
+		Mask:  mask, Bits: base,
+		Encode: func(ops ...int) uint64 {
+			shift := ops[2]
+			if shift < 1 || shift > int(f.esize) {
+				panic(fmt.Sprintf("arm64: %s shift %d is not in [1, %d]", f.name, shift, f.esize))
+			}
+			immhb := uint64(2*f.esize) - uint64(shift)
+			return 0x2f008c00 | f.q<<30 | immhb<<16 | reg("arm64", "vector", ops[1], 31)<<5 | reg("arm64", "vector", ops[0], 31)
+		},
+		Source: sqrshrunSource,
+		Golden: arm64Golden[f.name],
+	}
 }
 
 // elemInsn is the .4S (d false) or .2D (d true) by-element form of one
@@ -171,5 +231,45 @@ var arm64Golden = map[string][]Case{
 		{[]int{0, 0, 0, 1}, 0x4fc09800},    // fmul v0.2d, v0.2d, v0.d[1]
 		{[]int{17, 9, 26, 0}, 0x4fda9131},  // fmul v17.2d, v9.2d, v26.d[0]
 		{[]int{31, 31, 31, 1}, 0x4fdf9bff}, // fmul v31.2d, v31.2d, v31.d[1]
+	},
+	// sqrshrun: operands Vd, Vn, shift. Shift 1 and the element size are the
+	// ends of the range; every register field at 0 and 31; (16, 6, 5) is the
+	// last step of the luma half-sample filter in go-videodsp/kernels, (11, 9,
+	// 10) of the centre sample.
+	"sqrshrun.8b": {
+		{[]int{0, 0, 1}, 0x2f0f8c00},  // sqrshrun v0.8b, v0.8h, #1
+		{[]int{31, 0, 1}, 0x2f0f8c1f}, // sqrshrun v31.8b, v0.8h, #1
+		{[]int{0, 31, 1}, 0x2f0f8fe0}, // sqrshrun v0.8b, v31.8h, #1
+		{[]int{0, 0, 8}, 0x2f088c00},  // sqrshrun v0.8b, v0.8h, #8
+		{[]int{16, 6, 5}, 0x2f0b8cd0}, // sqrshrun v16.8b, v6.8h, #5
+	},
+	"sqrshrun2.16b": {
+		{[]int{0, 0, 1}, 0x6f0f8c00},   // sqrshrun2 v0.16b, v0.8h, #1
+		{[]int{31, 31, 8}, 0x6f088fff}, // sqrshrun2 v31.16b, v31.8h, #8
+		{[]int{17, 6, 5}, 0x6f0b8cd1},  // sqrshrun2 v17.16b, v6.8h, #5
+	},
+	"sqrshrun.4h": {
+		{[]int{0, 0, 1}, 0x2f1f8c00},   // sqrshrun v0.4h, v0.4s, #1
+		{[]int{31, 0, 1}, 0x2f1f8c1f},  // sqrshrun v31.4h, v0.4s, #1
+		{[]int{0, 31, 1}, 0x2f1f8fe0},  // sqrshrun v0.4h, v31.4s, #1
+		{[]int{0, 0, 16}, 0x2f108c00},  // sqrshrun v0.4h, v0.4s, #16
+		{[]int{11, 9, 10}, 0x2f168d2b}, // sqrshrun v11.4h, v9.4s, #10
+	},
+	"sqrshrun2.8h": {
+		{[]int{0, 0, 1}, 0x6f1f8c00},    // sqrshrun2 v0.8h, v0.4s, #1
+		{[]int{31, 31, 16}, 0x6f108fff}, // sqrshrun2 v31.8h, v31.4s, #16
+		{[]int{11, 10, 10}, 0x6f168d4b}, // sqrshrun2 v11.8h, v10.4s, #10
+	},
+	"sqrshrun.2s": {
+		{[]int{0, 0, 1}, 0x2f3f8c00},  // sqrshrun v0.2s, v0.2d, #1
+		{[]int{31, 0, 1}, 0x2f3f8c1f}, // sqrshrun v31.2s, v0.2d, #1
+		{[]int{0, 31, 1}, 0x2f3f8fe0}, // sqrshrun v0.2s, v31.2d, #1
+		{[]int{0, 0, 32}, 0x2f208c00}, // sqrshrun v0.2s, v0.2d, #32
+		{[]int{7, 9, 20}, 0x2f2c8d27}, // sqrshrun v7.2s, v9.2d, #20
+	},
+	"sqrshrun2.4s": {
+		{[]int{0, 0, 1}, 0x6f3f8c00},    // sqrshrun2 v0.4s, v0.2d, #1
+		{[]int{31, 31, 32}, 0x6f208fff}, // sqrshrun2 v31.4s, v31.2d, #32
+		{[]int{7, 9, 20}, 0x6f2c8d27},   // sqrshrun2 v7.4s, v9.2d, #20
 	},
 }

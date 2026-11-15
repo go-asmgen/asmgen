@@ -234,31 +234,58 @@ func TestArm64ElementIndex(t *testing.T) {
 	}
 }
 
+// SQRSHRUN: the spelling and WORD go-videodsp/kernels emits, the shift range
+// of each destination size, and no arrangement matching another's words.
+func TestArm64Sqrshrun(t *testing.T) {
+	in := Lookup("arm64", "sqrshrun.8b")
+	if got := in.Word(16, 6, 5); got != "WORD $0x2f0b8cd0 // VSQRSHRUN $5, V6.H8, V16.B8" {
+		t.Errorf("Word = %q", got)
+	}
+	if got := Lookup("arm64", "sqrshrun2.4s").Syntax(7, 9, 20); got != "VSQRSHRUN2 $20, V9.D2, V7.S4" {
+		t.Errorf("Syntax = %q", got)
+	}
+	for _, f := range sqrshrunForms {
+		in := Lookup("arm64", f.name)
+		in.Encode(0, 0, 1)
+		in.Encode(0, 0, int(f.esize)) // the ends of the range encode
+		for _, g := range sqrshrunForms {
+			if g.name != f.name && in.Matches(Lookup("arm64", g.name).Encode(3, 4, 1)) {
+				t.Errorf("%s matches a %s word", f.name, g.name)
+			}
+		}
+	}
+}
+
 func TestRefusals(t *testing.T) {
 	for name, f := range map[string]func(){
-		"arm64 V32":         func() { Lookup("arm64", "fmla.elem.2d").Encode(32, 0, 0, 0) },
-		"arm64 Vm -1":       func() { Lookup("arm64", "fmls.elem.4s").Encode(0, 0, -1, 0) },
-		"arm64 .D index 2":  func() { Lookup("arm64", "fmul.elem.2d").Encode(0, 0, 0, 2) },
-		"arm64 .S index 4":  func() { Lookup("arm64", "fmla.elem.4s").Encode(0, 0, 0, 4) },
-		"arm64 .S index -1": func() { Lookup("arm64", "fmla.elem.4s").Encode(0, 0, 0, -1) },
-		"unknown entry":     func() { Lookup("ppc64", "xvfoo") },
-		"VS64":              func() { Lookup("ppc64", "xvadddp").Encode(64, 0, 0) },
-		"VS-1 sqrt":         func() { Lookup("ppc64", "xvsqrtdp").Encode(0, -1) },
-		"vector 32":         func() { Lookup("loong64", "xvfmadd.d").Encode(32, 0, 0, 0) },
-		"general 32":        func() { Lookup("loong64", "vldrepl.d").Encode(0, 32, 0) },
-		"offset not ×8":     func() { Lookup("loong64", "xvldrepl.d").Encode(0, 4, 4) },
-		"offset 2048":       func() { Lookup("loong64", "xvldrepl.d").Encode(0, 4, 2048) },
-		"offset -2056":      func() { Lookup("loong64", "vldrepl.d").Encode(0, 4, -2056) },
-		"CSR 0x4000":        func() { Lookup("loong64", "csrrd").Encode(4, 0x4000) },
-		"CSR -1":            func() { Lookup("loong64", "csrwr").Encode(4, -1) },
-		"csr rd 32":         func() { Lookup("loong64", "csrrd").Encode(32, 0) },
-		"xchg rj R0":        func() { Lookup("loong64", "csrxchg").Encode(4, 0, 1) },
-		"xchg rj R1":        func() { Lookup("loong64", "csrxchg").Encode(4, 1, 1) },
-		"xchg rj 32":        func() { Lookup("loong64", "csrxchg").Encode(4, 32, 1) },
-		"V32 target":        func() { Lookup("s390x", "vfasb").Encode(32, 0, 0) },
-		"V32 source":        func() { Lookup("s390x", "vfssb").Encode(0, 0, 32) },
-		"V-1 fma":           func() { Lookup("s390x", "vfmasb").Encode(0, 0, 0, -1) },
-		"V32 sqrt":          func() { Lookup("s390x", "wfsqsb").Encode(0, 32) },
+		"sqrshrun shift 0":      func() { Lookup("arm64", "sqrshrun.8b").Encode(0, 0, 0) },
+		"sqrshrun .8b shift 9":  func() { Lookup("arm64", "sqrshrun.8b").Encode(0, 0, 9) },
+		"sqrshrun .4h shift 17": func() { Lookup("arm64", "sqrshrun.4h").Encode(0, 0, 17) },
+		"sqrshrun .2s shift 33": func() { Lookup("arm64", "sqrshrun.2s").Encode(0, 0, 33) },
+		"sqrshrun V32":          func() { Lookup("arm64", "sqrshrun.8b").Encode(0, 32, 1) },
+		"arm64 V32":             func() { Lookup("arm64", "fmla.elem.2d").Encode(32, 0, 0, 0) },
+		"arm64 Vm -1":           func() { Lookup("arm64", "fmls.elem.4s").Encode(0, 0, -1, 0) },
+		"arm64 .D index 2":      func() { Lookup("arm64", "fmul.elem.2d").Encode(0, 0, 0, 2) },
+		"arm64 .S index 4":      func() { Lookup("arm64", "fmla.elem.4s").Encode(0, 0, 0, 4) },
+		"arm64 .S index -1":     func() { Lookup("arm64", "fmla.elem.4s").Encode(0, 0, 0, -1) },
+		"unknown entry":         func() { Lookup("ppc64", "xvfoo") },
+		"VS64":                  func() { Lookup("ppc64", "xvadddp").Encode(64, 0, 0) },
+		"VS-1 sqrt":             func() { Lookup("ppc64", "xvsqrtdp").Encode(0, -1) },
+		"vector 32":             func() { Lookup("loong64", "xvfmadd.d").Encode(32, 0, 0, 0) },
+		"general 32":            func() { Lookup("loong64", "vldrepl.d").Encode(0, 32, 0) },
+		"offset not ×8":         func() { Lookup("loong64", "xvldrepl.d").Encode(0, 4, 4) },
+		"offset 2048":           func() { Lookup("loong64", "xvldrepl.d").Encode(0, 4, 2048) },
+		"offset -2056":          func() { Lookup("loong64", "vldrepl.d").Encode(0, 4, -2056) },
+		"CSR 0x4000":            func() { Lookup("loong64", "csrrd").Encode(4, 0x4000) },
+		"CSR -1":                func() { Lookup("loong64", "csrwr").Encode(4, -1) },
+		"csr rd 32":             func() { Lookup("loong64", "csrrd").Encode(32, 0) },
+		"xchg rj R0":            func() { Lookup("loong64", "csrxchg").Encode(4, 0, 1) },
+		"xchg rj R1":            func() { Lookup("loong64", "csrxchg").Encode(4, 1, 1) },
+		"xchg rj 32":            func() { Lookup("loong64", "csrxchg").Encode(4, 32, 1) },
+		"V32 target":            func() { Lookup("s390x", "vfasb").Encode(32, 0, 0) },
+		"V32 source":            func() { Lookup("s390x", "vfssb").Encode(0, 0, 32) },
+		"V-1 fma":               func() { Lookup("s390x", "vfmasb").Encode(0, 0, 0, -1) },
+		"V32 sqrt":              func() { Lookup("s390x", "wfsqsb").Encode(0, 32) },
 	} {
 		func() {
 			defer func() {
