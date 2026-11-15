@@ -64,3 +64,25 @@ func TestZmmRefusalsAndTranspose(t *testing.T) {
 		"VMOVDQA32 Z5, Z1",
 	})
 }
+
+func TestZmmByteOpsOperandOrder(t *testing.T) {
+	b := ymmBuilder()
+	b.VPANDD(Z0, Z1, Z2).VPORD(Z3, Z4, Z5).VPSRLW512(Z6, Z7, 4).
+		VPSHUFB512(Z8, Z9, Z10).VPERMB(Z11, Z12, Z13).
+		VGF2P8AFFINEQB(0, Z14, Z15, Z16).VGF2P8AFFINEQB(0x63, Z17, Z18, Z19).
+		VGF2P8AFFINEQBBcst(0, Z20, Z21, "8(AX)").VBROADCASTI32X4(Z22, "16(AX)")
+	checkInsns(t, b, []string{
+		"VPANDD Z2, Z1, Z0",
+		"VPORD Z5, Z4, Z3",
+		"VPSRLW $4, Z7, Z6",
+		"VPSHUFB Z10, Z9, Z8",
+		"VPERMB Z13, Z12, Z11",
+		"VGF2P8AFFINEQB $0x00, Z16, Z15, Z14",
+		"VGF2P8AFFINEQB $0x63, Z19, Z18, Z17",
+		"VGF2P8AFFINEQB.BCST $0x00, 8(AX), Z21, Z20",
+		"VBROADCASTI32X4 16(AX), Z22",
+	})
+	mustPanic(t, "out of 0..15", func() { b.VPSRLW512(Z0, Z0, 16) })
+	mustPanic(t, "out of 0..15", func() { b.VPSRLW512(Z0, Z0, -1) })
+	mustPanic(t, "invalid ZMM", func() { b.VPERMB(ZReg(32), Z0, Z0) })
+}
