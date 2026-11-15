@@ -175,6 +175,16 @@ narrow lane width, and emit `WORD`s whose comment is the proposed spelling, for
 example `VSQRSHRUN $5, V6.H8, V16.B8`. The 24 reference encodings come from
 Apple clang 21's integrated assembler, read back with `otool -t`.
 
+**arm64 SSHL (shift by register), which the Go assembler lacks**: each lane of
+Vn shifted by the signed low byte of the same lane of Vm, a negative count
+being an arithmetic shift right. It is the variable right shift a codec needs
+when the shift is a bitstream parameter (H.264 weighted prediction's logWD),
+where the immediate `VSSHR`/`VSRSHR` do not apply. `Builder.VSSHL8B`,
+`VSSHL16B`, `VSSHL4H`, `VSSHL8H`, `VSSHL2S`, `VSSHL4S` and `VSSHL2D` take
+`(d, n, m)` in A64 order and emit `WORD`s commented with the proposed spelling,
+for example `VSSHL V22.H8, V0.H8, V0.H8`. The 23 reference encodings come from
+Apple clang 21's integrated assembler, read back with `otool -t`.
+
 **ppc64le VSX float64 arithmetic the Go assembler lacks**: `cmd/asm` has the
 VSX loads, stores and permutes (`LXVD2X`, `LXVDSX`, `STXVD2X`, `XXPERMDI`) but
 no vector double arithmetic. `Builder.XVADDDP`, `XVSUBDP`, `XVMULDP`,
