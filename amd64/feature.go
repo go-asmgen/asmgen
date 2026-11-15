@@ -288,6 +288,28 @@ func FamilyProbe(name string, family uint32) *emit.Function {
 	return b.Func()
 }
 
+// SignatureProbe returns a `func() uint32` reporting CPUID leaf 1's EAX, the
+// processor signature: the stepping (bits 3:0), the model (7:4), the base family
+// (11:8), the extended model (19:16) and the extended family (27:20; Intel SDM
+// vol. 2A, CPUID leaf 01H; AMD APM vol. 3, CPUID Fn0000_0001_EAX). It returns the
+// raw register and decodes nothing, because the displayed model is
+// (extended model << 4) | model for family 6 and 0xF only, and a caller that
+// needs a model or a stepping applies that rule in Go, where it can be tested on
+// any machine, together with VendorProbe. Like VendorProbe and FamilyProbe it is
+// for tuning choices measured on particular cores, never for correctness, and a
+// hypervisor may present a CPU model that reports a signature the hardware under
+// it does not have.
+func SignatureProbe(name string) *emit.Function {
+	sig := Layout(nil, nil, []string{"ret"}, []Type{Uint32})
+	b := NewFunc(name, sig, 0)
+	b.Raw("MOVL $1, AX")
+	b.Raw("XORL CX, CX")
+	b.Raw("CPUID")
+	b.Raw("MOVL AX, ret+0(FP)")
+	b.Ret()
+	return b.Func()
+}
+
 // VendorProbe returns a `func() bool` reporting whether the processor's CPUID
 // vendor string (leaf 0) is vendor: "GenuineIntel", "AuthenticAMD",
 // "HygonGenuine", and so on. It is for tuning choices measured to differ by
