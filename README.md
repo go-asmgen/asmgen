@@ -97,7 +97,9 @@ separate from AVX2's leaf-7 bit), `AVX512F` and `AVX512DQ` are
 there too (`AVX512F` also requires the OS to save opmask and ZMM state, XCR0
 mask 0xE6; on macOS it answers false, since Darwin enables that state lazily;
 `AVX512DQ` is F plus CPUID.7.0:EBX bit 17, what a kernel executing `KMOVB`
-needs: Knights Landing has F without DQ),
+needs: Knights Landing has F without DQ; `AVX512BW` is F plus EBX bit 30, for
+512-bit `VPSHUFB`/`VPSRLW`; `AVX512VBMI` adds ECX bit 1, for `VPERMB`; `GFNI` is
+ECX bit 8 with F, for the 512-bit `VGF2P8AFFINEQB`),
 and the list stops at what has callers. `amd64.VendorProbe(name, "GenuineIntel")`
 (v0.12.0) compares CPUID leaf 0's vendor string, for tuning choices measured to
 differ by vendor (go-fft's radix rule); it never gates correctness, since a
@@ -125,8 +127,12 @@ rotate), `VPXORD` and `VPXORDBcst` (XOR with a memory word broadcast to every
 lane, no separate broadcast), `VPADDD512`, the shifts `VPSLLD512`/`VPSRLD512`,
 `VMOVDQA32`/`VMOVDQU32`/`VMOVDQU32Store`, `VPBROADCASTD512`, the four
 `VPUNPCK*512` forms and `Transpose4x32Z` (the 4x4 transpose inside each 128-bit
-lane, putting word `w` of sixteen blocks in one register). Same conventions as
-the YMM ops; gate a kernel with `FeatureProbe(name, AVX512F)`. Run on a Zen 4
+lane, putting word `w` of sixteen blocks in one register). Byte-level ops:
+`VPANDD`, `VPORD`, `VPSRLW512` and `VPSHUFB512` (BW), `VPERMB` (VBMI),
+`VGF2P8AFFINEQB` and its broadcast-matrix form (GFNI, multiplication by a
+constant of any GF(2^8) as an 8x8 bit matrix on every byte), `VBROADCASTI32X4`
+(a 16-byte table in all four lanes). Same conventions as the YMM ops; gate a
+kernel with `FeatureProbe(name, AVX512F)` and one probe per extension it uses. Run on a Zen 4
 in `examples/simd/amd64`.
 
 **arm64 vector float64 arithmetic**: `Builder.VFADD2D`, `VFSUB2D`, `VFMUL2D`,

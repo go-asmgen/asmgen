@@ -9,8 +9,9 @@ import "fmt"
 // ZReg names one of the thirty-two 512-bit registers Z0..Z31. Like the YReg
 // methods, the typed methods below take the destination first (Intel order)
 // and emit the reversed Plan 9 operand order, and refuse a register past Z31
-// at generation time. Every instruction here is AVX-512F; gate the kernel with
-// FeatureProbe(name, AVX512F).
+// at generation time. Every instruction here is AVX-512F unless its comment
+// names another extension (BW, VBMI, GFNI); gate the kernel with
+// FeatureProbe(name, ...) for each one it uses.
 type ZReg uint8
 
 // The thirty-two ZMM registers.
@@ -137,6 +138,63 @@ func (b *Builder) VMOVDQU32Store(mem string, src ZReg) *Builder {
 // VPBROADCASTD512 emits dst = the 32-bit word at mem in all sixteen lanes.
 func (b *Builder) VPBROADCASTD512(dst ZReg, mem string) *Builder {
 	b.yinsn("VPBROADCASTD %s, %s", mem, dst)
+	return b
+}
+
+// VPANDD emits dst = x & y over 512 bits (AVX-512F).
+func (b *Builder) VPANDD(dst, x, y ZReg) *Builder { return b.zvex3("VPANDD", dst, x, y) }
+
+// VPORD emits dst = x | y over 512 bits (AVX-512F).
+func (b *Builder) VPORD(dst, x, y ZReg) *Builder { return b.zvex3("VPORD", dst, x, y) }
+
+// VPSRLW512 emits dst = x >> n (logical) on each 16-bit lane, 0 <= n <= 15.
+// Gate with FeatureProbe(name, AVX512BW).
+func (b *Builder) VPSRLW512(dst, x ZReg, n int) *Builder {
+	if n < 0 || n > 15 {
+		panic(fmt.Sprintf("amd64: 16-bit lane shift count %d out of 0..15", n))
+	}
+	b.yinsn("VPSRLW $%d, %s, %s", n, x, dst)
+	return b
+}
+
+// VPSHUFB512 emits the per-128-bit-lane byte shuffle: byte i of dst is the
+// byte of src's lane selected by the low four bits of byte i of ctrl, or zero
+// when bit 7 of that control byte is set. Gate with FeatureProbe(name,
+// AVX512BW).
+func (b *Builder) VPSHUFB512(dst, src, ctrl ZReg) *Builder {
+	b.yinsn("VPSHUFB %s, %s, %s", ctrl, src, dst)
+	return b
+}
+
+// VPERMB emits the full 64-byte permutation: byte i of dst is byte idx[i]&63
+// of data. Gate with FeatureProbe(name, AVX512VBMI).
+func (b *Builder) VPERMB(dst, idx, data ZReg) *Builder {
+	b.yinsn("VPERMB %s, %s, %s", data, idx, dst)
+	return b
+}
+
+// VGF2P8AFFINEQB emits dst = A*x + imm on every byte of x, where A is the 8x8
+// bit matrix held in the 64-bit lane of a that covers the byte. Row j of the
+// matrix is byte 7-j of that lane; output bit j is the parity of that row ANDed
+// with the input byte, XORed with bit j of imm (Intel SDM, VGF2P8AFFINEQB).
+// With imm 0 it multiplies by a constant of GF(2^8) under any polynomial.
+// Gate with FeatureProbe(name, GFNI).
+func (b *Builder) VGF2P8AFFINEQB(imm uint8, dst, x, a ZReg) *Builder {
+	b.yinsn("VGF2P8AFFINEQB $0x%02x, %s, %s, %s", imm, a, x, dst)
+	return b
+}
+
+// VGF2P8AFFINEQBBcst is VGF2P8AFFINEQB with the matrix read from the 64-bit
+// word at mem and broadcast to every lane (embedded broadcast).
+func (b *Builder) VGF2P8AFFINEQBBcst(imm uint8, dst, x ZReg, mem string) *Builder {
+	b.yinsn("VGF2P8AFFINEQB.BCST $0x%02x, %s, %s, %s", imm, mem, x, dst)
+	return b
+}
+
+// VBROADCASTI32X4 emits dst = the 128 bits at mem repeated in all four lanes,
+// the way to load a per-lane table for VPSHUFB.
+func (b *Builder) VBROADCASTI32X4(dst ZReg, mem string) *Builder {
+	b.yinsn("VBROADCASTI32X4 %s, %s", mem, dst)
 	return b
 }
 

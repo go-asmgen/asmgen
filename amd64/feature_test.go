@@ -140,7 +140,7 @@ func TestFeatureString(t *testing.T) {
 	for _, c := range []struct {
 		f    Feature
 		want string
-	}{{AVX2, "AVX2"}, {POPCNT, "POPCNT"}, {AVX512F, "AVX512F"}, {FMA, "FMA"}, {AVX512DQ, "AVX512DQ"}, {Feature(99), "Feature(?)"}} {
+	}{{AVX2, "AVX2"}, {POPCNT, "POPCNT"}, {AVX512F, "AVX512F"}, {FMA, "FMA"}, {AVX512DQ, "AVX512DQ"}, {AVX512BW, "AVX512BW"}, {AVX512VBMI, "AVX512VBMI"}, {GFNI, "GFNI"}, {Feature(99), "Feature(?)"}} {
 		if got := c.f.String(); got != c.want {
 			t.Errorf("Feature(%d).String() = %q, want %q", c.f, got, c.want)
 		}
@@ -343,5 +343,44 @@ func TestVendorProbeRefusesAWrongLength(t *testing.T) {
 			}()
 			VendorProbe("p", v)
 		}()
+	}
+}
+
+// TestBWVBMIAndGFNIProbesTestTheirBits pins the CPUID.7.0 bits each probe reads,
+// after the same OS checks AVX512F makes: BW is EBX bit 30 (with F, bit 16),
+// VBMI is ECX bit 1 on top of F and BW, and GFNI is ECX bit 8 on top of F (the
+// 512-bit form). A probe that read ECX where the feature is in EBX, or the
+// reverse, would enable a kernel on a CPU that cannot run it.
+func TestBWVBMIAndGFNIProbesTestTheirBits(t *testing.T) {
+	for _, c := range []struct {
+		f      Feature
+		name   string
+		wants  []string
+		absent string
+	}{
+		{AVX512BW, "hasBW", []string{"ANDL $0x40010000, BX", "CMPL BX, $0x40010000"}, "TESTL $0x2, CX"},
+		{AVX512VBMI, "hasVBMI", []string{"ANDL $0x40010000, BX", "CMPL BX, $0x40010000", "TESTL $0x2, CX"}, ""},
+		{GFNI, "hasGFNI", []string{"TESTL $0x10000, BX", "TESTL $0x100, CX"}, "$0x40010000"},
+	} {
+		f := emit.NewFile("amd64")
+		f.Add(FeatureProbe(c.name, c.f))
+		s := f.String()
+		at := -1
+		for _, want := range append([]string{"CMPL AX, $7", "ANDL $0x18000000, CX", "XGETBV", "ANDL $0xE6, AX", "CMPL AX, $0xE6"}, c.wants...) {
+			i := strings.Index(s, want)
+			if i < 0 {
+				t.Fatalf("the %v probe does not contain %q:\n%s", c.f, want, s)
+			}
+			if i < at {
+				t.Errorf("%v: %q comes before the step that must precede it:\n%s", c.f, want, s)
+			}
+			at = i
+		}
+		if c.absent != "" && strings.Contains(s, c.absent) {
+			t.Errorf("the %v probe contains %q:\n%s", c.f, c.absent, s)
+		}
+		if !strings.Contains(s, c.name+"_unsupported:") {
+			t.Errorf("%v: no label of its own", c.f)
+		}
 	}
 }

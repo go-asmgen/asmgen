@@ -60,6 +60,24 @@ const (
 	// raises #UD there. The probe answers false on macOS for the reason AVX512F
 	// does.
 	AVX512DQ
+	// AVX512BW reports AVX512F and the AVX-512 byte/word extension (CPUID.7.0:
+	// EBX bit 30), with the OS state AVX512F needs. It is what 512-bit VPSHUFB,
+	// VPSRLW, VPADDB and VPMOVB2M need; AVX512F alone raises #UD on them (Knights
+	// Landing has F without BW). Callers: go-encryptions/whirlpool. The probe
+	// answers false on macOS for the reason AVX512F does.
+	AVX512BW
+	// AVX512VBMI reports AVX512F, AVX512BW and the AVX-512 vector byte
+	// manipulation instructions (CPUID.7.0:ECX bit 1): VPERMB, the 64-byte
+	// permutation. Skylake-X has F and BW without it; Ice Lake, Zen 4 and later
+	// have it. Callers: go-encryptions/whirlpool.
+	AVX512VBMI
+	// GFNI reports the Galois-field instructions (CPUID.7.0:ECX bit 8) in their
+	// 512-bit form, so AVX512F with the OS state it needs is required too:
+	// VGF2P8AFFINEQB multiplies by any constant in GF(2^8), whatever the
+	// polynomial, as an 8x8 bit-matrix product on every byte. The 128- and
+	// 256-bit forms need only AVX or AVX2 (and VL for EVEX); this probe says
+	// nothing about them. Callers: go-encryptions/whirlpool.
+	GFNI
 )
 
 // The list stops there on purpose. Every entry costs a probe sequence that has
@@ -79,6 +97,12 @@ func (f Feature) String() string {
 		return "FMA"
 	case AVX512DQ:
 		return "AVX512DQ"
+	case AVX512BW:
+		return "AVX512BW"
+	case AVX512VBMI:
+		return "AVX512VBMI"
+	case GFNI:
+		return "GFNI"
 	}
 	return "Feature(?)"
 }
@@ -141,7 +165,7 @@ func FeatureProbe(name string, f Feature) *emit.Function {
 		b.Raw("TESTL $0x20, BX // AVX2")
 		b.Raw("JZ %s", done)
 
-	case AVX512F, AVX512DQ:
+	case AVX512F, AVX512DQ, AVX512BW, AVX512VBMI, GFNI:
 		// Leaf 7 must exist before it is read, as for AVX2.
 		b.Raw("XORL AX, AX")
 		b.Raw("CPUID")
@@ -170,12 +194,29 @@ func FeatureProbe(name string, f Feature) *emit.Function {
 		b.Raw("MOVL $7, AX")
 		b.Raw("XORL CX, CX")
 		b.Raw("CPUID")
-		if f == AVX512DQ {
+		switch f {
+		case AVX512DQ:
 			b.Raw("ANDL $0x30000, BX // AVX512F and AVX512DQ")
 			b.Raw("CMPL BX, $0x30000")
 			b.Raw("JNE %s", done)
-		} else {
+		case AVX512F:
 			b.Raw("TESTL $0x10000, BX // AVX512F")
+			b.Raw("JZ %s", done)
+		case AVX512BW:
+			b.Raw("ANDL $0x40010000, BX // AVX512F and AVX512BW")
+			b.Raw("CMPL BX, $0x40010000")
+			b.Raw("JNE %s", done)
+		case AVX512VBMI:
+			// ECX holds leaf 7's second feature word: bit 1 is VBMI.
+			b.Raw("ANDL $0x40010000, BX // AVX512F and AVX512BW")
+			b.Raw("CMPL BX, $0x40010000")
+			b.Raw("JNE %s", done)
+			b.Raw("TESTL $0x2, CX // AVX512VBMI")
+			b.Raw("JZ %s", done)
+		case GFNI:
+			b.Raw("TESTL $0x10000, BX // AVX512F, for the 512-bit form")
+			b.Raw("JZ %s", done)
+			b.Raw("TESTL $0x100, CX // GFNI")
 			b.Raw("JZ %s", done)
 		}
 
