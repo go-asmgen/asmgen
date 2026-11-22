@@ -140,7 +140,7 @@ func TestFeatureString(t *testing.T) {
 	for _, c := range []struct {
 		f    Feature
 		want string
-	}{{AVX2, "AVX2"}, {POPCNT, "POPCNT"}, {AVX512F, "AVX512F"}, {FMA, "FMA"}, {AVX512DQ, "AVX512DQ"}, {AVX512BW, "AVX512BW"}, {AVX512VBMI, "AVX512VBMI"}, {GFNI, "GFNI"}, {AVX512VNNI, "AVX512VNNI"}, {AVX512VPOPCNTDQ, "AVX512VPOPCNTDQ"}, {VPCLMULQDQ, "VPCLMULQDQ"}, {F16C, "F16C"}, {BMI2, "BMI2"}, {Feature(99), "Feature(?)"}} {
+	}{{AVX2, "AVX2"}, {POPCNT, "POPCNT"}, {AVX512F, "AVX512F"}, {FMA, "FMA"}, {AVX512DQ, "AVX512DQ"}, {AVX512BW, "AVX512BW"}, {AVX512VBMI, "AVX512VBMI"}, {GFNI, "GFNI"}, {AVX512VNNI, "AVX512VNNI"}, {AVX512VPOPCNTDQ, "AVX512VPOPCNTDQ"}, {VPCLMULQDQ, "VPCLMULQDQ"}, {VPCLMULQDQ256, "VPCLMULQDQ256"}, {AVXVNNI, "AVXVNNI"}, {F16C, "F16C"}, {BMI2, "BMI2"}, {Feature(99), "Feature(?)"}} {
 		if got := c.f.String(); got != c.want {
 			t.Errorf("Feature(%d).String() = %q, want %q", c.f, got, c.want)
 		}

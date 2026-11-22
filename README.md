@@ -101,7 +101,9 @@ needs: Knights Landing has F without DQ; `AVX512BW` is F plus EBX bit 30, for
 512-bit `VPSHUFB`/`VPSRLW`; `AVX512VBMI` adds ECX bit 1, for `VPERMB`; `GFNI` is
 ECX bit 8 with F, for the 512-bit `VGF2P8AFFINEQB`; `AVX512VNNI` (ECX bit 11),
 `AVX512VPOPCNTDQ` (ECX bit 14) and `VPCLMULQDQ` (ECX bit 10) are each ECX bit plus
-F, in their 512-bit forms; `F16C` is leaf 1 ECX bit 29 with the YMM OS check, like
+F, in their 512-bit forms; `VPCLMULQDQ256` is the VEX.256 form (the same bit with
+AVX and the YMM OS check, no AVX512F: Zen 3 and Alder Lake have it without
+AVX-512) and `AVXVNNI` is the VEX-encoded VNNI (CPUID.7.1:EAX bit 4); `F16C` is leaf 1 ECX bit 29 with the YMM OS check, like
 `FMA`; `BMI2` is CPUID.7.0:EBX bit 8, with no OS state to check),
 and the list stops at what has callers. `amd64.VendorProbe(name, "GenuineIntel")`
 (v0.12.0) compares CPUID leaf 0's vendor string, for tuning choices measured to

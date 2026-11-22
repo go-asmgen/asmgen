@@ -90,10 +90,21 @@ const (
 	// are BITALG (ECX bit 12), which this probe does not cover.
 	AVX512VPOPCNTDQ
 	// VPCLMULQDQ reports the vector carry-less multiply (CPUID.7.0:ECX bit 10;
-	// Intel SDM vol. 2A, Table 3-8) in its 512-bit form, so AVX512F with its OS
-	// state is required too. The 256-bit form needs only AVX; this probe says
-	// nothing about it.
+	// Intel SDM vol. 2A, Table 3-8) in its 512-bit (EVEX.512) form, so AVX512F
+	// with its OS state is required too. A kernel that folds in YMM must use
+	// VPCLMULQDQ256 instead: the VEX.256 form exists without AVX-512 (AMD Zen 3,
+	// Intel Alder Lake), and this probe answers false on those CPUs.
 	VPCLMULQDQ
+	// VPCLMULQDQ256 reports the same instruction in its VEX.256 form: CPUID.7.0:
+	// ECX bit 10 with AVX, OSXSAVE and XCR0 XMM|YMM, and no AVX512F. Callers: a
+	// YMM CRC or GHASH fold. For the ZMM form use VPCLMULQDQ.
+	VPCLMULQDQ256
+	// AVXVNNI reports the VEX-encoded VNNI (VPDPBUSD, VPDPWSSD and their
+	// saturating forms on XMM/YMM, no AVX-512): CPUID.7.1:EAX bit 4, which needs
+	// sub-leaf 1 to exist (leaf 7's EAX is its highest sub-leaf), with AVX,
+	// OSXSAVE and XCR0 XMM|YMM. It is a different bit from AVX512VNNI
+	// (CPUID.7.0:ECX bit 11), which does not imply it.
+	AVXVNNI
 	// F16C reports the half-precision conversions VCVTPH2PS and VCVTPS2PH (CPUID
 	// leaf 1, ECX bit 29; Intel SDM vol. 2A, Table 3-6), with the OS saving YMM
 	// state, as for FMA: the instructions are VEX-encoded.
@@ -135,6 +146,10 @@ func (f Feature) String() string {
 		return "AVX512VPOPCNTDQ"
 	case VPCLMULQDQ:
 		return "VPCLMULQDQ"
+	case VPCLMULQDQ256:
+		return "VPCLMULQDQ256"
+	case AVXVNNI:
+		return "AVXVNNI"
 	case F16C:
 		return "F16C"
 	case BMI2:
@@ -213,6 +228,43 @@ func FeatureProbe(name string, f Feature) *emit.Function {
 		b.Raw("CPUID")
 		b.Raw("TESTL $0x100, BX // BMI2")
 		b.Raw("JZ %s", done)
+
+	case VPCLMULQDQ256, AVXVNNI:
+		// Leaf 7 must exist, then AVX and OSXSAVE, then XCR0 XMM|YMM, as AVX2;
+		// no AVX512F is required, which is the point.
+		b.Raw("XORL AX, AX")
+		b.Raw("CPUID")
+		b.Raw("CMPL AX, $7")
+		b.Raw("JL %s", done)
+
+		b.Raw("MOVL $1, AX")
+		b.Raw("CPUID")
+		b.Raw("ANDL $0x18000000, CX // AVX and OSXSAVE")
+		b.Raw("CMPL CX, $0x18000000")
+		b.Raw("JNE %s", done)
+
+		b.Raw("XORL CX, CX")
+		b.Raw("XGETBV")
+		b.Raw("ANDL $6, AX // XMM and YMM state enabled in XCR0")
+		b.Raw("CMPL AX, $6")
+		b.Raw("JNE %s", done)
+
+		b.Raw("MOVL $7, AX")
+		b.Raw("XORL CX, CX")
+		b.Raw("CPUID")
+		if f == VPCLMULQDQ256 {
+			b.Raw("TESTL $0x400, CX // VPCLMULQDQ")
+			b.Raw("JZ %s", done)
+		} else {
+			// Sub-leaf 0's EAX is the highest sub-leaf: 1 must exist to be read.
+			b.Raw("CMPL AX, $1")
+			b.Raw("JL %s", done)
+			b.Raw("MOVL $7, AX")
+			b.Raw("MOVL $1, CX")
+			b.Raw("CPUID")
+			b.Raw("TESTL $0x10, AX // AVX-VNNI")
+			b.Raw("JZ %s", done)
+		}
 
 	case F16C:
 		// Leaf 1 alone, like FMA: F16C is ECX bit 29, with AVX and OSXSAVE.
