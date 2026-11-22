@@ -78,6 +78,32 @@ const (
 	// 256-bit forms need only AVX or AVX2 (and VL for EVEX); this probe says
 	// nothing about them. Callers: go-encryptions/whirlpool.
 	GFNI
+	// AVX512VNNI reports the AVX-512 neural-network instructions (CPUID.7.0:ECX
+	// bit 11; Intel SDM vol. 2A, CPUID leaf 07H, Table 3-8) in their 512-bit
+	// form, so AVX512F with its OS state is required too: VPDPBUSD, VPDPWSSD and
+	// their saturating forms. The VEX-encoded AVX-VNNI is a different bit
+	// (sub-leaf 1, EAX bit 4) this probe says nothing about.
+	AVX512VNNI
+	// AVX512VPOPCNTDQ reports the vector population count on doublewords and
+	// quadwords (CPUID.7.0:ECX bit 14; Intel SDM vol. 2A, Table 3-8), with
+	// AVX512F and its OS state: VPOPCNTD and VPOPCNTQ. The byte and word forms
+	// are BITALG (ECX bit 12), which this probe does not cover.
+	AVX512VPOPCNTDQ
+	// VPCLMULQDQ reports the vector carry-less multiply (CPUID.7.0:ECX bit 10;
+	// Intel SDM vol. 2A, Table 3-8) in its 512-bit form, so AVX512F with its OS
+	// state is required too. The 256-bit form needs only AVX; this probe says
+	// nothing about it.
+	VPCLMULQDQ
+	// F16C reports the half-precision conversions VCVTPH2PS and VCVTPS2PH (CPUID
+	// leaf 1, ECX bit 29; Intel SDM vol. 2A, Table 3-6), with the OS saving YMM
+	// state, as for FMA: the instructions are VEX-encoded.
+	F16C
+	// BMI2 reports PDEP, PEXT, MULX, SHLX, SHRX, SARX, RORX and BZHI (CPUID.7.0:
+	// EBX bit 8; Intel SDM vol. 2A, Table 3-8). They are general-purpose
+	// register instructions, so there is no OS state to check. On AMD parts
+	// before Zen 3, PDEP and PEXT are microcoded and slow: BMI2's bit says the
+	// instructions exist, not that they are fast.
+	BMI2
 )
 
 // The list stops there on purpose. Every entry costs a probe sequence that has
@@ -103,6 +129,16 @@ func (f Feature) String() string {
 		return "AVX512VBMI"
 	case GFNI:
 		return "GFNI"
+	case AVX512VNNI:
+		return "AVX512VNNI"
+	case AVX512VPOPCNTDQ:
+		return "AVX512VPOPCNTDQ"
+	case VPCLMULQDQ:
+		return "VPCLMULQDQ"
+	case F16C:
+		return "F16C"
+	case BMI2:
+		return "BMI2"
 	}
 	return "Feature(?)"
 }
@@ -165,7 +201,34 @@ func FeatureProbe(name string, f Feature) *emit.Function {
 		b.Raw("TESTL $0x20, BX // AVX2")
 		b.Raw("JZ %s", done)
 
-	case AVX512F, AVX512DQ, AVX512BW, AVX512VBMI, GFNI:
+	case BMI2:
+		// Leaf 7 has to exist before it is read, as for AVX2. No OS state: the
+		// instructions use general-purpose registers only.
+		b.Raw("XORL AX, AX")
+		b.Raw("CPUID")
+		b.Raw("CMPL AX, $7")
+		b.Raw("JL %s", done)
+		b.Raw("MOVL $7, AX")
+		b.Raw("XORL CX, CX")
+		b.Raw("CPUID")
+		b.Raw("TESTL $0x100, BX // BMI2")
+		b.Raw("JZ %s", done)
+
+	case F16C:
+		// Leaf 1 alone, like FMA: F16C is ECX bit 29, with AVX and OSXSAVE.
+		b.Raw("MOVL $1, AX")
+		b.Raw("CPUID")
+		b.Raw("ANDL $0x38000000, CX // F16C, AVX and OSXSAVE")
+		b.Raw("CMPL CX, $0x38000000")
+		b.Raw("JNE %s", done)
+
+		b.Raw("XORL CX, CX")
+		b.Raw("XGETBV")
+		b.Raw("ANDL $6, AX // XMM and YMM state enabled in XCR0")
+		b.Raw("CMPL AX, $6")
+		b.Raw("JNE %s", done)
+
+	case AVX512F, AVX512DQ, AVX512BW, AVX512VBMI, GFNI, AVX512VNNI, AVX512VPOPCNTDQ, VPCLMULQDQ:
 		// Leaf 7 must exist before it is read, as for AVX2.
 		b.Raw("XORL AX, AX")
 		b.Raw("CPUID")
@@ -217,6 +280,21 @@ func FeatureProbe(name string, f Feature) *emit.Function {
 			b.Raw("TESTL $0x10000, BX // AVX512F, for the 512-bit form")
 			b.Raw("JZ %s", done)
 			b.Raw("TESTL $0x100, CX // GFNI")
+			b.Raw("JZ %s", done)
+		case AVX512VNNI:
+			b.Raw("TESTL $0x10000, BX // AVX512F, for the 512-bit form")
+			b.Raw("JZ %s", done)
+			b.Raw("TESTL $0x800, CX // AVX512VNNI")
+			b.Raw("JZ %s", done)
+		case AVX512VPOPCNTDQ:
+			b.Raw("TESTL $0x10000, BX // AVX512F")
+			b.Raw("JZ %s", done)
+			b.Raw("TESTL $0x4000, CX // AVX512VPOPCNTDQ")
+			b.Raw("JZ %s", done)
+		case VPCLMULQDQ:
+			b.Raw("TESTL $0x10000, BX // AVX512F, for the 512-bit form")
+			b.Raw("JZ %s", done)
+			b.Raw("TESTL $0x400, CX // VPCLMULQDQ")
 			b.Raw("JZ %s", done)
 		}
 
