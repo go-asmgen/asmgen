@@ -32,6 +32,7 @@ var golden = map[string]func(f *emit.File){
 	"pass16_fma":          func(f *emit.File) { goFFTFMA.Pass(f, "pass16", 16) },
 	"last3":               func(f *emit.File) { goFFT.Last(f, "last3", 3) },
 	"last9_fma":           func(f *emit.File) { goFFTFMA.Last(f, "last9", 9) },
+	"last20_evex":         func(f *emit.File) { goFFT.LastEVEX(f, "last20", 20) },
 	"pass512_4":           func(f *emit.File) { goFFT.Pass512(f, "pass4", 4) },
 	"last512_8_fma":       func(f *emit.File) { goFFTFMA.Last512(f, "last8", 8) },
 	"lastrun2":            func(f *emit.File) { goFFT.LastRun(f, "lastRun2", 2) },
