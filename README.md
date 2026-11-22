@@ -99,7 +99,10 @@ mask 0xE6; on macOS it answers false, since Darwin enables that state lazily;
 `AVX512DQ` is F plus CPUID.7.0:EBX bit 17, what a kernel executing `KMOVB`
 needs: Knights Landing has F without DQ; `AVX512BW` is F plus EBX bit 30, for
 512-bit `VPSHUFB`/`VPSRLW`; `AVX512VBMI` adds ECX bit 1, for `VPERMB`; `GFNI` is
-ECX bit 8 with F, for the 512-bit `VGF2P8AFFINEQB`),
+ECX bit 8 with F, for the 512-bit `VGF2P8AFFINEQB`; `AVX512VNNI` (ECX bit 11),
+`AVX512VPOPCNTDQ` (ECX bit 14) and `VPCLMULQDQ` (ECX bit 10) are each ECX bit plus
+F, in their 512-bit forms; `F16C` is leaf 1 ECX bit 29 with the YMM OS check, like
+`FMA`; `BMI2` is CPUID.7.0:EBX bit 8, with no OS state to check),
 and the list stops at what has callers. `amd64.VendorProbe(name, "GenuineIntel")`
 (v0.12.0) compares CPUID leaf 0's vendor string, for tuning choices measured to
 differ by vendor (go-fft's radix rule); it never gates correctness, since a
