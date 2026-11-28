@@ -581,7 +581,11 @@ func skNextBlock(b *asm.Builder, r int) {
 // instruction AVX-512 lacks at this width is exact: VADDSUBPD becomes a sign
 // flip and an add, VXORPD becomes VPXORQ, the i = 0 blend uses opmask K1.
 func (c *Kernels) Pass512(f *emit.File, name string, r int) {
-	check("Pass512", r, 2, 4, 8)
+	check("Pass512", r, 2, 4, 8, 12)
+	if r == 12 {
+		c.pass12z512(f, name)
+		return
+	}
 	sig := asm.Layout(
 		[]string{"cc", "ch", "tw", "k", "ido", "l1"},
 		[]asm.Type{asm.Ptr, asm.Ptr, asm.Ptr, asm.Ptr, asm.Int64, asm.Int64}, nil, nil,
