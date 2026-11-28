@@ -574,14 +574,23 @@ func skNextBlock(b *asm.Builder, r int) {
 }
 
 // Pass512 emits name(cc, ch, tw *complex128, k *float64, ido, l1 int): Pass's
-// radix-r pass (r = 2, 4 or 8) with four points per ZMM register. It needs ido >= 4; ido mod 4 is finished with one
-// 256-bit and/or one 128-bit step, the same bodies the AVX2 kernel runs. The
+// radix-r pass (r = 2, 4, 8, 10 or 12) with four points per ZMM register. It
+// needs ido >= 4; ido mod 4 is finished with one 256-bit and/or one 128-bit
+// step, the same bodies the AVX2 kernel runs. The
 // constants table has 64-byte rows (the offsets of Kernels.K doubled), and it
 // holds the AddSub row. Every substitution for an
 // instruction AVX-512 lacks at this width is exact: VADDSUBPD becomes a sign
 // flip and an add, VXORPD becomes VPXORQ, the i = 0 blend uses opmask K1.
 func (c *Kernels) Pass512(f *emit.File, name string, r int) {
-	check("Pass512", r, 2, 4, 8)
+	check("Pass512", r, 2, 4, 8, 10, 12)
+	if r == 10 {
+		c.pass10z512(f, name)
+		return
+	}
+	if r == 12 {
+		c.pass12z512(f, name)
+		return
+	}
 	sig := asm.Layout(
 		[]string{"cc", "ch", "tw", "k", "ido", "l1"},
 		[]asm.Type{asm.Ptr, asm.Ptr, asm.Ptr, asm.Ptr, asm.Int64, asm.Int64}, nil, nil,
