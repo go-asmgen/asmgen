@@ -107,8 +107,9 @@ func (c *Kernels) pass10z512(f *emit.File, name string) {
 		Raw("LEAQ (%s)(CX*4), AX", comp2InBase[q-1]).
 		Raw("DECQ %d(SP)", blocks).
 		Raw("JMP kloop").
-		Raw("done:").
-		Raw("VZEROUPPER").
+		Raw("done:")
+	zeroHighZ(b)
+	b.Raw("VZEROUPPER").
 		Ret()
 	f.Add(b.Func())
 }

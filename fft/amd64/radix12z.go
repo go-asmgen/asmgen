@@ -5,6 +5,18 @@ import (
 	"github.com/go-asmgen/asmgen/emit"
 )
 
+// zeroHighZ zeroes Z16..Z31 before VZEROUPPER, which leaves them as they were.
+// The radix-10 and radix-12 512-bit passes use Z16 and above, and on a Zen 4
+// the dirty registers slow the plain AVX2 code that runs afterwards in the same
+// process by 1.3 to 1.9 % (a 1,440-point plan after a 1,080-point one: 1.583
+// then 1.604 µs per call); zeroing them on exit removes it. VPXORQ of a
+// register with itself is a zeroing idiom, and AVX-512F has it.
+func zeroHighZ(b *asm.Builder) {
+	for i := 16; i < 32; i++ {
+		b.Raw("VPXORQ Z%d, Z%d, Z%d", i, i, i)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Radix-12 pass at 512 bits: Pass512's four points per ZMM register around the
 // radix-12 prime-factor butterfly of radix12.go (four radix-3 butterflies, then
@@ -109,8 +121,9 @@ func (c *Kernels) pass12z512(f *emit.File, name string) {
 		Raw("ADDQ R12, AX").
 		Raw("DECQ %d(SP)", comp12Blocks).
 		Raw("JMP kloop").
-		Raw("done:").
-		Raw("VZEROUPPER").
+		Raw("done:")
+	zeroHighZ(b)
+	b.Raw("VZEROUPPER").
 		Ret()
 	f.Add(b.Func())
 }
